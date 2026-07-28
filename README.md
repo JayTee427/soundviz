@@ -69,6 +69,12 @@ Most modes slowly auto-rotate until the first time you drag the camera, then it 
 - **Mode** and **Theme** — same as the keyboard shortcuts.
 - **Sensitivity** — the master gain on everything reactive, applied on top of a slow automatic level control (watch the `agc` readout in the status area). The auto-gain absorbs the difference between loud sources like YouTube and quiet ones, so treat this slider as taste — **up** for more drama, **down** for a calmer picture — rather than something you must correct per source.
 - **Glow** — bloom intensity. Low values look sharp and technical, high values look hazy and dreamlike.
+- **Tuning** — three deeper knobs, applied across every mode:
+  - **Base light** scales the dim resting glow everything idles at. Zero means silence is pitch black; high values keep the geometry visible even in quiet passages.
+  - **Peak light** scales how hard the music pushes brightness. Drop it for a subtle shimmer, raise it for full neon assault.
+  - **Speed** is a global clock on the animation itself — every orbit, ripple, and particle runs slower or faster. 0.5 with Drift is remarkably calming; 2.0 with Vortex is chaos.
+  - **Reset tuning** snaps all five sliders (these three plus Sensitivity and Glow) back to the shipped defaults. Tweak fearlessly — the way back is one click.
+  - Your tuning is remembered between sessions.
 - **Backdrop** — load your own image to sit behind the visuals (see below).
 - **Auto-cycle** — hands-off mode: rotates through all eleven visuals every 30 seconds and advances the theme every 95 seconds. This is what you want for a second monitor.
 - The bar meters at the bottom show live bass / mid / treble levels. If they're flat while music is playing, the audio source isn't connected — recheck the share dialog.
@@ -193,7 +199,7 @@ Built with [Three.js](https://threejs.org/) r160 and the Web Audio API. No frame
 | Black screen, red banner at the bottom | Three.js couldn't load from the CDN. Check your connection and reload. |
 | Visuals run but never move | Wrong source, or the media is muted. Check the bass/mid/treble meters; try Demo to confirm the graphics work. |
 | "Permission denied" | You dismissed the browser prompt. Click the source button again and allow it. |
-| Everything is a blown-out white blob | Sensitivity too high. Slide it down. |
+| Everything is a blown-out white blob | Sensitivity or Peak light too high. Slide them down, or hit Reset tuning. |
 | Barely any movement on loud music | Sensitivity too low, or you're capturing a silent source. |
 | Choppy / low frame rate | Lower Glow, shrink the window, or switch from Nebula to Core. |
 | Drift looks flat or empty | Give it the full 24 seconds to fill, then raise sensitivity — chill tracks are quiet. |

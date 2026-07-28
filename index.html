@@ -122,6 +122,11 @@
   </div>
   <div class="sliderrow"><span>SENSITIVITY</span><input type="range" id="sens" min="0.3" max="3" step="0.05" value="1.15"></div>
   <div class="sliderrow"><span>GLOW</span><input type="range" id="glow" min="0" max="2.5" step="0.05" value="1.1"></div>
+  <div class="row"><label>Tuning</label></div>
+  <div class="sliderrow"><span>BASE LIGHT</span><input type="range" id="tFloor" min="0" max="2" step="0.05" value="1"></div>
+  <div class="sliderrow"><span>PEAK LIGHT</span><input type="range" id="tPeak" min="0.2" max="2" step="0.05" value="1"></div>
+  <div class="sliderrow"><span>SPEED</span><input type="range" id="tSpeed" min="0.3" max="2" step="0.05" value="1"></div>
+  <div class="row"><button class="chip" id="tReset">&#8634; Reset tuning</button></div>
   <div class="row"><label>Backdrop</label>
     <button class="chip" id="bgLoad">Image&hellip;</button>
     <button class="chip" id="bgClear">Clear</button>
@@ -161,6 +166,13 @@ const THEMES = [
   { name:'Twilight',    a:0x7aa2ff, b:0xffb0d0, bg:0x05060f, fog:0x0c1024 },
   { name:'Sage',        a:0x9fe0c0, b:0xe8d9a0, bg:0x040806, fog:0x0d1a14 },
 ];
+
+/* ============================================================ tuning
+   Global knobs the modes read at draw time. floor scales the dim base
+   level everything idles at, peak scales the audio-driven brightness,
+   speed scales the visual clock. 1/1/1 is the shipped tuning.          */
+const TUNE = { floor: 1, peak: 1, speed: 1 };
+const TUNE_DEFAULTS = { floor: 1, peak: 1, speed: 1, sens: 1.15, glow: 1.1 };
 
 /* ============================================================ audio */
 class AudioEngine {
@@ -410,7 +422,7 @@ class Nebula extends VisualMode {
       pos[j]     = Math.cos(a) * r;
       pos[j + 1] = this.baseY[i] * (1 + amp * 2.4) + Math.sin(t * 1.4 + this.seed[i]) * 0.5;
       pos[j + 2] = Math.sin(a) * r;
-      const b = 0.1 + Math.min(1, amp) * 0.8;   // clamp: real audio pushes amp past 1
+      const b = 0.1 * TUNE.floor + Math.min(1, amp) * 0.8 * TUNE.peak;   // clamp: real audio pushes amp past 1
       this._c.lerpColors(this.cA, this.cB, Math.min(1, amp * 1.15));
       col[j] = this._c.r * b; col[j + 1] = this._c.g * b; col[j + 2] = this._c.b * b;
     }
@@ -465,7 +477,7 @@ class City extends VisualMode {
       this.dmy.scale.set(1, hgt, 1);
       this.dmy.updateMatrix();
       this.mesh.setMatrixAt(k, this.dmy.matrix);
-      const b = 0.03 + Math.pow(Math.min(1, amp), 1.9) * 0.7 + (L.beat ? 0.1 : 0);
+      const b = 0.03 * TUNE.floor + Math.pow(Math.min(1, amp), 1.9) * 0.7 * TUNE.peak + (L.beat ? 0.1 : 0);
       this._c.lerpColors(this.cA, this.cB, Math.min(1, amp));
       this.mesh.setColorAt(k, this._c.multiplyScalar(b));
     }
@@ -544,10 +556,10 @@ class Core extends VisualMode {
     this.geo.attributes.position.needsUpdate = true;
     this.geo.computeVertexNormals();
 
-    this.mat.emissiveIntensity = 0.02 + L.energy * 0.22;
+    this.mat.emissiveIntensity = 0.02 * TUNE.floor + L.energy * 0.22 * TUNE.peak;
     this.mat.emissive.lerpColors(this.cA, this.cB, Math.min(1, L.mid * sens * 1.4));
     this.wireMat.color.lerpColors(this.cA, this.cB, Math.min(1, L.bass * sens));
-    this.wireMat.opacity = 0.14 + Math.min(0.6, L.mid * sens * 0.9);
+    this.wireMat.opacity = 0.14 * TUNE.floor + Math.min(0.6, L.mid * sens * 0.9) * TUNE.peak;
     this.light.intensity = 30 + L.energy * 320;
     this.light2.intensity = 20 + L.bass * 260;
     this.shell.rotation.y += dt * 0.25; this.shell.rotation.x += dt * 0.1;
@@ -635,7 +647,7 @@ class Tunnel extends VisualMode {
         vp[k] = cx + Math.cos(a) * rad;
         vp[k+1] = cy + Math.sin(a) * rad;
         vp[k+2] = z;
-        const b = (0.18 + m * 1.9) * fade;
+        const b = (0.18 * TUNE.floor + m * 1.9 * TUNE.peak) * fade;
         this._c.lerpColors(this.cA, this.cB, Math.min(1, m * 1.7));
         vc[k] = this._c.r * b; vc[k+1] = this._c.g * b; vc[k+2] = this._c.b * b;
       }
@@ -725,7 +737,7 @@ class Terrain extends VisualMode {
         const h = Math.pow(a, 1.55) * 30;
         const k = (dst + i) * 3;
         pos[k + 1] = h;
-        const shade = 0.10 + Math.min(1, a * 1.25) * 0.95;
+        const shade = 0.10 * TUNE.floor + Math.min(1, a * 1.25) * 0.95 * TUNE.peak;
         this._c.lerpColors(this.cA, this.cB, Math.min(1, a * 1.1));
         col[k] = this._c.r * shade; col[k+1] = this._c.g * shade; col[k+2] = this._c.b * shade;
       }
@@ -810,7 +822,7 @@ class Vortex extends VisualMode {
 
       // hot in the middle, cool at the rim
       const heat = Math.min(1, Math.pow(Math.max(0, 1 - (r - 5) / 45), 2.4) + amp * 0.35);
-      const b = 0.05 + amp * 0.5 + heat * 0.16;
+      const b = 0.05 * TUNE.floor + (amp * 0.5 + heat * 0.16) * TUNE.peak;
       this._c.lerpColors(this.cA, this.cB, heat);
       col[j] = this._c.r * b; col[j+1] = this._c.g * b; col[j+2] = this._c.b * b;
     }
@@ -902,7 +914,7 @@ class Attractor extends VisualMode {
 
       // derivatives run to ~1500 near the wings; normalize there or everything pins white
       const speed = Math.min(1, Math.hypot(dx, dy, dz) / 700);
-      const b = 0.09 + speed * 0.85;
+      const b = 0.09 * TUNE.floor + speed * 0.85 * TUNE.peak;
       this._c.lerpColors(this.cA, this.cB, speed);
       col[j] = this._c.r * b; col[j+1] = this._c.g * b; col[j+2] = this._c.b * b;
     }
@@ -1005,7 +1017,7 @@ class Drift extends VisualMode {
         const a = this.hist[src + i];
         const k = (dst + i) * 3;
         pos[k + 1] = Math.pow(a, 1.25) * 11;
-        const b = (0.03 + Math.pow(Math.min(1, a * 1.2), 1.6) * 0.62) * age;
+        const b = (0.03 * TUNE.floor + Math.pow(Math.min(1, a * 1.2), 1.6) * 0.62 * TUNE.peak) * age;
         this._c.lerpColors(this.cA, this.cB, Math.min(1, Math.pow(a, 0.8) * 1.3));
         col[k] = this._c.r * b; col[k+1] = this._c.g * b; col[k+2] = this._c.b * b;
       }
@@ -1101,13 +1113,13 @@ class Equalizer extends VisualMode {
       this.dmy.scale.set(1, hgt, 1);
       this.dmy.updateMatrix();
       this.bars.setMatrixAt(i, this.dmy.matrix);
-      this.bars.setColorAt(i, this._c.clone().multiplyScalar(0.3 + lit * 0.5));
+      this.bars.setColorAt(i, this._c.clone().multiplyScalar(0.3 * TUNE.floor + lit * 0.5 * TUNE.peak));
 
       this.dmy.position.set(x, -hgt / 2 - 0.6, 0);
       this.dmy.scale.set(1, -hgt, 1);          // negative scale flips the gradient too
       this.dmy.updateMatrix();
       this.bars.setMatrixAt(NB + i, this.dmy.matrix);
-      this.bars.setColorAt(NB + i, this._c.clone().multiplyScalar((0.3 + lit * 0.5) * 0.32));
+      this.bars.setColorAt(NB + i, this._c.clone().multiplyScalar((0.3 * TUNE.floor + lit * 0.5 * TUNE.peak) * 0.32));
 
       // cap + reflection
       this._c.lerpColors(this.cA, this.cB, Math.min(1, this.peak[i] / 26));
@@ -1115,7 +1127,7 @@ class Equalizer extends VisualMode {
       this.dmy.scale.set(1, 1, 1);
       this.dmy.updateMatrix();
       this.caps.setMatrixAt(i, this.dmy.matrix);
-      this.caps.setColorAt(i, this._c.clone().multiplyScalar(0.75 + (L.beat ? 0.35 : 0)));
+      this.caps.setColorAt(i, this._c.clone().multiplyScalar((0.75 + (L.beat ? 0.35 : 0)) * TUNE.peak));
 
       this.dmy.position.set(x, -this.peak[i] - 1.1, 0);
       this.dmy.updateMatrix();
@@ -1239,7 +1251,7 @@ class Singularity extends VisualMode {
 
       const sp = Math.min(1, Math.hypot(v[j], v[j+1], v[j+2]) / 70);
       const near = Math.min(1, 40 / r);
-      const b = 0.04 + sp * 0.7 + near * 0.55;
+      const b = 0.04 * TUNE.floor + (sp * 0.7 + near * 0.55) * TUNE.peak;
       this._c.lerpColors(this.cA, this.cB, Math.min(1, sp * 0.8 + near * 0.5));
       col[k]   = this._c.r * b * 0.35; col[k+1] = this._c.g * b * 0.35; col[k+2] = this._c.b * b * 0.35;
       col[k+3] = this._c.r * b;        col[k+4] = this._c.g * b;        col[k+5] = this._c.b * b;
@@ -1367,7 +1379,7 @@ class Membrane extends VisualMode {
 
         const lit = Math.min(1, amp * focus * 1.15);
         // dim the outer rings so the eye follows the ripples inward
-        const b2 = (0.06 + lit * 0.85) * (0.45 + (1 - u) * 0.55);
+        const b2 = (0.06 * TUNE.floor + lit * 0.85 * TUNE.peak) * (0.45 + (1 - u) * 0.55);
         this._c.lerpColors(this.cA, this.cB, lit);
         col[k] = this._c.r * b2; col[k+1] = this._c.g * b2; col[k+2] = this._c.b * b2;
       }
@@ -1498,7 +1510,7 @@ $('#btnSystem').onclick = () => pickSource('system');
 $('#btnMic').onclick    = () => pickSource('mic');
 $('#btnDemo').onclick   = () => pickSource('demo');
 document.querySelectorAll('[data-src]').forEach(b => b.onclick = () => pickSource(b.dataset.src));
-$('#sens').oninput = e => sens = +e.target.value;
+$('#sens').oninput = e => { sens = +e.target.value; saveTune(); };
 
 /* ---------- backdrop controls ---------- */
 $('#bgLoad').onclick = () => $('#bgFile').click();
@@ -1557,8 +1569,47 @@ addEventListener('keydown', e => {
 /* ============================================================ main loop */
 applyTheme();
 setMode(0);
-let baseGlow = 1.1, beatGlow = 0;
-$('#glow').oninput = e => { baseGlow = +e.target.value; };
+let baseGlow = 1.1, beatGlow = 0, vt = 0;
+const TUNE_KEY = 'neonflux.tune';
+function saveTune() {
+  try {
+    localStorage.setItem(TUNE_KEY, JSON.stringify({
+      floor: TUNE.floor, peak: TUNE.peak, speed: TUNE.speed, sens, glow: baseGlow,
+    }));
+  } catch (err) {}
+}
+function syncTuneUI() {
+  $('#sens').value = sens;
+  $('#glow').value = baseGlow;
+  $('#tFloor').value = TUNE.floor;
+  $('#tPeak').value = TUNE.peak;
+  $('#tSpeed').value = TUNE.speed;
+}
+$('#glow').oninput = e => { baseGlow = +e.target.value; saveTune(); };
+$('#tFloor').oninput = e => { TUNE.floor = +e.target.value; saveTune(); };
+$('#tPeak').oninput  = e => { TUNE.peak  = +e.target.value; saveTune(); };
+$('#tSpeed').oninput = e => { TUNE.speed = +e.target.value; saveTune(); };
+$('#tReset').onclick = () => {
+  const d = TUNE_DEFAULTS;
+  TUNE.floor = d.floor; TUNE.peak = d.peak; TUNE.speed = d.speed;
+  sens = d.sens; baseGlow = d.glow;
+  syncTuneUI();
+  try { localStorage.removeItem(TUNE_KEY); } catch (err) {}
+  toast('TUNING RESET');
+};
+// restore saved tuning, clamped to each slider's range in case of stale values
+try {
+  const saved = JSON.parse(localStorage.getItem(TUNE_KEY));
+  if (saved) {
+    const cl = (v, lo, hi, dflt) => (typeof v === 'number' && isFinite(v)) ? Math.min(hi, Math.max(lo, v)) : dflt;
+    TUNE.floor = cl(saved.floor, 0, 2, 1);
+    TUNE.peak  = cl(saved.peak, 0.2, 2, 1);
+    TUNE.speed = cl(saved.speed, 0.3, 2, 1);
+    sens       = cl(saved.sens, 0.3, 3, TUNE_DEFAULTS.sens);
+    baseGlow   = cl(saved.glow, 0, 2.5, TUNE_DEFAULTS.glow);
+    syncTuneUI();
+  }
+} catch (err) {}
 const clock = new THREE.Clock();
 const bar = v => '█'.repeat(Math.round(Math.min(1, v) * 8)).padEnd(8, '░');
 
@@ -1568,6 +1619,10 @@ function loop() {
   const t = clock.elapsedTime;
   const L = audio.update(t, dt);
   const gsens = sens * audio.gain;          // user sensitivity on top of auto-gain
+  // visual clock: modes see scaled time so the SPEED slider slows or hurries
+  // every animation uniformly without touching audio analysis or UI timers
+  const vdt = dt * TUNE.speed;
+  vt += vdt;
 
   if (auto) {
     autoModeT += dt; autoThemeT += dt;
@@ -1586,7 +1641,7 @@ function loop() {
   beatGlow *= Math.exp(-dt * 5);
   bloom.strength = baseGlow + beatGlow + Math.min(0.5, L.energy * audio.gain * 0.4);
 
-  if (visual) visual.update(audio.freq, L, dt, t, gsens);
+  if (visual) visual.update(audio.freq, L, vdt, vt, gsens);
   if (audio.mode !== 'none') {
     statusEl.textContent =
       `${MODES[modeIdx].name.toLowerCase()} · ${audio.mode} · agc ×${audio.gain.toFixed(2)}\n` +

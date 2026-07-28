@@ -2,7 +2,7 @@
 
 A 3D, real-time sound visualizer that runs in your browser and reacts to **whatever your PC is already playing** — Spotify, YouTube, a game, your DAW, anything. No install, no build step, no virtual audio cables. It's one HTML file.
 
-Ten visual modes, twelve color themes, an optional backdrop image of your own, mouse-orbit camera, and bloom that pulses on the beat.
+Eleven visual modes, twelve color themes, an optional backdrop image of your own, mouse-orbit camera, and bloom that pulses on the beat.
 
 ![Nebula mode](img/nebula.png)
 
@@ -55,7 +55,7 @@ Practical consequences:
 |---|---|
 | Drag | Orbit the camera |
 | Scroll | Zoom in / out |
-| `1` – `9`, `0` | Switch visual mode (`0` is the tenth) |
+| `1` – `9`, `0`, `-` | Switch visual mode (`0` is the tenth, `-` the eleventh) |
 | `T` | Cycle color theme |
 | `A` | Toggle auto-cycle |
 | `H` | Hide / show the UI panel |
@@ -70,7 +70,7 @@ Most modes slowly auto-rotate until the first time you drag the camera, then it 
 - **Sensitivity** — the master gain on everything reactive. Turn it **up** for quiet or heavily-compressed tracks, **down** if loud passages look like a solid blown-out wall. This is the single most useful knob; expect to touch it when you change genres.
 - **Glow** — bloom intensity. Low values look sharp and technical, high values look hazy and dreamlike.
 - **Backdrop** — load your own image to sit behind the visuals (see below).
-- **Auto-cycle** — hands-off mode: rotates through all ten visuals every 30 seconds and advances the theme every 95 seconds. This is what you want for a second monitor.
+- **Auto-cycle** — hands-off mode: rotates through all eleven visuals every 30 seconds and advances the theme every 95 seconds. This is what you want for a second monitor.
 - The bar meters at the bottom show live bass / mid / treble levels. If they're flat while music is playing, the audio source isn't connected — recheck the share dialog.
 
 ---
@@ -117,6 +117,10 @@ Because it averages ~5 frames into every row and tilts gain upward across the sp
 
 ![Singularity mode](img/singularity.png)
 
+**11 · Membrane** — a sheet of particle fabric stretched over a speaker, sagging into a funnel with a hole at the middle. Ripples are born at the **rim**, shaped by the spectrum, and travel *inward* — the opposite of Vortex, whose shockwaves race outward. As each wave converges on the centre its energy focuses into a smaller and smaller circle, so it grows taller as it goes before vanishing into the mouth. The funnel itself deepens with the bass, and the lip flares on every kick.
+
+![Membrane mode](img/membrane.png)
+
 ### Themes
 
 Twelve palettes. The bright ones: **Cyberpunk** (cyan/magenta), **Synthwave** (orange/purple), **Matrix** (green), **Ice** (blue/white), **Inferno** (fire), **Toxic** (acid green), **Vaporwave** (pink/teal), **Aurora** (mint/violet), **Ultraviolet** (deep purple/electric blue).
@@ -146,7 +150,7 @@ Two practical notes. Bright or near-white images pick up the bloom and will glow
 
 - **Press `H` then `F`.** Hiding the UI and going fullscreen is what makes this feel like a real visualizer rather than a web demo. This is the intended way to actually use it.
 - **Put it on a second monitor with `A`.** Fullscreen it on a spare display, turn on auto-cycle, and leave it running while you work or play. It'll happily run for hours and never sit on the same visual for long.
-- **Match the mode to the music.** Lounge, chill and lo-fi belong in **Drift** — the other modes are built around transients that this music doesn't have, and will mostly sit still. Sparse, slow tracks with real bass hits look best in Core or Vortex. Dense, busy tracks suit Nebula, City, or Terrain. Four-on-the-floor dance music is what Vortex's and Singularity's beat surges were built for. **Equalizer** works with anything and is the one to pick if you want to *read* the music rather than just watch it.
+- **Match the mode to the music.** Lounge, chill and lo-fi belong in **Drift** — the other modes are built around transients that this music doesn't have, and will mostly sit still. Sparse, slow tracks with real bass hits look best in Core or Vortex. Dense, busy tracks suit Nebula, City, or Terrain. Four-on-the-floor dance music is what Vortex's and Singularity's beat surges were built for, and **Membrane** turns a steady kick into waves you can watch march all the way to the centre. **Equalizer** works with anything and is the one to pick if you want to *read* the music rather than just watch it.
 - **The spectrogram modes need to warm up.** Both start flat because their history buffers are empty — about four seconds for Terrain, and a full **24 seconds** for Drift before the picture is complete. Drift is worth the wait; don't judge it at five seconds.
 - **Drift likes more sensitivity.** Chill music is quiet and often gently mastered. If the dunes look flat, push sensitivity to 1.5–2.0 — much more headroom than you'd want on the punchier modes.
 - **Sensitivity is genre-dependent.** Modern loudness-war masters sit near the sensitivity floor — drop to ~0.7. Classical, jazz, and vinyl rips often need 1.8+ to come alive.
@@ -170,6 +174,7 @@ Everything lives in `index.html` — no build step, so edit and refresh.
 - **Tune beat detection** in `AudioEngine.update()` — it compares current bass against a rolling 50-frame average with a 160 ms refractory period. Lower the `1.35` multiplier for more sensitive triggering. Vortex's shockwaves, Singularity's gravity surge and the bloom pulse all key off this.
 - **Change the EQ's feel:** `rise` and `fall` in `Equalizer.update()` set how fast bars track the music (fast up, slow down), and `this.peakV[i] += dt * 26` is the gravity on the peak caps — lower it for caps that hang longer.
 - **Change the black hole:** `this.G` is the gravitational constant and `this.horizon` the kill radius in `Singularity`. The `K = 0.25` constant sets streak length in seconds of travel — raise it for longer comet tails.
+- **Change the membrane:** in `Membrane`, `* 30` on the ripple sets peak height and `focus` controls how much a wave grows as it converges; `this.depth` is the funnel sag, and `this.rowDur` (0.03 s per ring) sets how fast waves travel inward.
 
 ---
 

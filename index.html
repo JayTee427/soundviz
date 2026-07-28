@@ -133,7 +133,7 @@
 </div>
 
 <div id="toast"></div>
-<div id="keys" class="hidden">drag orbit &nbsp;·&nbsp; scroll zoom &nbsp;·&nbsp; [1-9,0] mode &nbsp;·&nbsp; [T] theme &nbsp;·&nbsp; [A] auto &nbsp;·&nbsp; [H] hide ui &nbsp;·&nbsp; [F] fullscreen</div>
+<div id="keys" class="hidden">drag orbit &nbsp;·&nbsp; scroll zoom &nbsp;·&nbsp; [1-9,0,-] mode &nbsp;·&nbsp; [T] theme &nbsp;·&nbsp; [A] auto &nbsp;·&nbsp; [H] hide ui &nbsp;·&nbsp; [F] fullscreen</div>
 <div id="loadfail"></div>
 
 <script type="module">
@@ -1245,6 +1245,135 @@ class Singularity extends VisualMode {
   }
 }
 
+/* ---------- 11. MEMBRANE — fabric over a speaker, ripples running inward ----
+   The inverse of Vortex: waves are born at the rim shaped by the spectrum
+   and travel toward the middle, gaining height as they converge, before
+   being swallowed by the hole. The sheet also sags into a funnel that
+   deepens with the bass.                                                */
+class Membrane extends VisualMode {
+  constructor(theme) {
+    super(theme);
+    const R = this.R = 96, S = this.S = 168;   // rings (age) × spokes
+    this.rIn = 5.5;
+    this.rOut = 62;
+    this.spacing = (this.rOut - this.rIn) / (R - 1);
+    this.rowDur = 0.03;                        // ≈ 21 units/sec inward
+    this.acc = 0;
+    this.p = 0;
+    this.hist = new Float32Array(R * S);
+    this.cur = new Float32Array(S);
+    this.bin = new Uint16Array(S);
+    for (let j = 0; j < S; j++) {
+      // mirror the spectrum around the rim so the ripple is symmetric
+      const u = Math.abs(((j / S) * 2) - 1);
+      this.bin[j] = Math.floor(Math.pow(u, 1.5) * 420) + 2;
+    }
+
+    const V = R * S;
+    this.pos = new Float32Array(V * 3);
+    this.col = new Float32Array(V * 3);
+    // x/z never change, so write the polar layout once
+    for (let i = 0; i < R; i++) {
+      const rad = this.rOut - i * this.spacing;
+      for (let j = 0; j < S; j++) {
+        const th = (j / S) * Math.PI * 2;
+        const k = (i * S + j) * 3;
+        this.pos[k] = Math.cos(th) * rad;
+        this.pos[k + 2] = Math.sin(th) * rad;
+      }
+    }
+    this.geo = new THREE.BufferGeometry();
+    this.geo.setAttribute('position', new THREE.BufferAttribute(this.pos, 3));
+    this.geo.setAttribute('color', new THREE.BufferAttribute(this.col, 3));
+    this.mat = new THREE.PointsMaterial({
+      size: 0.45, vertexColors: true, sizeAttenuation: true,
+      blending: THREE.AdditiveBlending, depthWrite: false, transparent: true,
+    });
+    this.group.add(new THREE.Points(this.geo, this.mat));
+
+    // the mouth: a dark disc with a glowing lip
+    this.hole = new THREE.Mesh(
+      new THREE.CircleGeometry(this.rIn * 1.02, 64),
+      new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.DoubleSide })
+    );
+    this.hole.rotation.x = -Math.PI / 2;
+    this.group.add(this.hole);
+    this.lip = new THREE.Mesh(
+      new THREE.RingGeometry(this.rIn * 0.98, this.rIn * 1.16, 64),
+      new THREE.MeshBasicMaterial({
+        color: theme.b, transparent: true, opacity: 0.8, side: THREE.DoubleSide,
+        blending: THREE.AdditiveBlending, depthWrite: false,
+      })
+    );
+    this.lip.rotation.x = -Math.PI / 2;
+    this.group.add(this.lip);
+
+    scene.add(this.group);
+
+    this.cA = new THREE.Color(theme.a);
+    this.cB = new THREE.Color(theme.b);
+    this._c = new THREE.Color();
+    this.depth = 0;
+  }
+  update(freq, L, dt, t, sens) {
+    const R = this.R, S = this.S;
+    for (let j = 0; j < S; j++) {
+      const b = this.bin[j];
+      const s = (freq[b - 1] + freq[b] * 2 + freq[b + 1]) / (4 * 255);
+      this.cur[j] = Math.min(1.6, s * sens);
+    }
+    this.acc += dt;
+    while (this.acc >= this.rowDur) {
+      this.acc -= this.rowDur;
+      this.p = (this.p - 1 + R) % R;            // newest row sits at the rim
+      const base = this.p * S;
+      for (let j = 0; j < S; j++) this.hist[base + j] = this.cur[j];
+    }
+    const frac = this.acc / this.rowDur;
+
+    const bass = Math.min(1.4, L.bass * sens);
+    this.depth += ((18 + bass * 14) - this.depth) * Math.min(1, dt * 5);
+    const pos = this.pos, col = this.col;
+    const span = this.rOut - this.rIn;
+
+    for (let i = 0; i < R; i++) {
+      const rad = this.rOut - i * this.spacing;
+      // rings advance inward one slot per push; blend across the gap so the
+      // ripples glide instead of stepping
+      const rowA = ((this.p + i) % R) * S;
+      const rowB = i === 0 ? -1 : ((this.p + i - 1) % R) * S;
+      const u = (rad - this.rIn) / span;                 // 1 at rim, 0 at hole
+      const env = Math.min(1, Math.max(0, (rad - this.rIn) / 9));
+      const focus = 1 + 1.5 * (1 - u);                   // energy piles up as it converges
+      const funnel = -this.depth * Math.pow(this.rIn / rad, 1.5);
+
+      for (let j = 0; j < S; j++) {
+        const a = this.hist[rowA + j];
+        const bv = rowB < 0 ? this.cur[j] : this.hist[rowB + j];
+        const amp = a + (bv - a) * frac;
+        const k = (i * S + j) * 3;
+        pos[k + 1] = funnel + Math.pow(amp, 1.0) * 30 * env * focus;
+
+        const lit = Math.min(1, amp * focus * 1.15);
+        // dim the outer rings so the eye follows the ripples inward
+        const b2 = (0.06 + lit * 0.85) * (0.45 + (1 - u) * 0.55);
+        this._c.lerpColors(this.cA, this.cB, lit);
+        col[k] = this._c.r * b2; col[k+1] = this._c.g * b2; col[k+2] = this._c.b * b2;
+      }
+    }
+    this.geo.attributes.position.needsUpdate = true;
+    this.geo.attributes.color.needsUpdate = true;
+
+    if (L.beat) this.mat.size = 0.68;
+    this.mat.size += (0.45 - this.mat.size) * Math.min(1, dt * 5);
+    this.lip.material.opacity = 0.4 + Math.min(0.6, bass * 0.8);
+    this.lip.scale.setScalar(1 + bass * 0.16);
+    this.hole.position.y = -this.depth;
+    this.lip.position.y = -this.depth + 0.15;
+    this.group.rotation.y += dt * 0.05;
+  }
+}
+
 /* ---------- mode registry: class + preferred camera framing ---------- */
 const MODES = [
   { name:'Nebula',    cls:Nebula,    cam:{ pos:[0,26,64],  min:12, max:220, rot:0.5  } },
@@ -1257,6 +1386,7 @@ const MODES = [
   { name:'Drift',     cls:Drift,     cam:{ pos:[0,34,104], min:14, max:320, rot:0    } },
   { name:'Equalizer', cls:Equalizer, cam:{ pos:[0,11,68],  min:12, max:300, rot:0    } },
   { name:'Singularity', cls:Singularity, cam:{ pos:[0,22,118], min:8, max:400, rot:0.15 } },
+  { name:'Membrane',  cls:Membrane,  cam:{ pos:[0,68,152], min:12, max:340, rot:0    } },
 ];
 
 /* ============================================================ app state */
@@ -1399,9 +1529,9 @@ function toggleAuto() {
 $('#autoBtn').onclick = toggleAuto;
 
 addEventListener('keydown', e => {
-  // 1-9 select the first nine modes, 0 selects the tenth
-  const n = e.key === '0' ? 10 : +e.key;
-  if (n >= 1 && n <= 10 && n <= MODES.length) { setMode(n - 1); toast(MODES[n - 1].name.toUpperCase()); }
+  // 1-9 select the first nine modes, 0 the tenth, - the eleventh
+  const n = e.key === '0' ? 10 : (e.key === '-' ? 11 : +e.key);
+  if (n >= 1 && n <= 11 && n <= MODES.length) { setMode(n - 1); toast(MODES[n - 1].name.toUpperCase()); }
   else if (e.key === 't' || e.key === 'T') { setTheme((themeIdx + 1) % THEMES.length); toast(THEMES[themeIdx].name.toUpperCase()); }
   else if (e.key === 'a' || e.key === 'A') toggleAuto();
   else if (e.key === 'h' || e.key === 'H') {

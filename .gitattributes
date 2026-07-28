@@ -1,0 +1,11 @@
+# Normalize text files to LF in the repository and on checkout,
+# so contributors on Windows, macOS, and Linux see identical diffs.
+* text=auto eol=lf
+
+*.html text eol=lf
+*.md   text eol=lf
+
+# Never munge binary assets.
+*.png binary
+*.jpg binary
+*.gif binary

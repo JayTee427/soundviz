@@ -4,6 +4,8 @@ A 3D, real-time sound visualizer that runs in your browser and reacts to **whate
 
 Three visual modes, four color themes, mouse-orbit camera, and bloom that pulses on the beat.
 
+![Nebula mode](img/nebula.png)
+
 ---
 
 ## Quick start
@@ -74,11 +76,19 @@ The camera slowly auto-rotates until the first time you drag it, then it stays w
 
 **1 · Nebula** — 14,000 particles in a three-armed spiral galaxy. Radius maps to frequency: the inner core rides the bass, the outer arms shimmer with the treble. The whole galaxy spins faster as the track gets more energetic, and particles bloom on detected beats. Best for ambient, drum & bass, anything with a wide frequency spread.
 
-**2 · City** — a 25×25 grid of neon blocks arranged as a cyberpunk skyline, seen from above. Height and color follow the spectrum radially outward from the center, so kick drums punch up the middle and hi-hats ripple around the edges. Try zooming down to street level and looking up.
+**2 · City** — a 25×25 grid of neon blocks arranged as a cyberpunk skyline. Height and color follow the spectrum radially outward from the center, so kick drums punch up the middle and hi-hats ripple around the edges. Try zooming down to street level and looking up.
+
+![City mode](img/city.png)
 
 **3 · Core** — a plasma sphere wrapped in a neon lattice. Bass inflates it, mids ripple the surface into churning noise, treble drives the orbiting sparkle field, and the whole thing kicks on each beat. The most "reactive-looking" of the three; good for bass-heavy music.
 
-Themes are **Cyberpunk** (cyan/magenta), **Synthwave** (orange/purple), **Matrix** (green), and **Ice** (blue/white).
+![Core mode](img/core.png)
+
+### Themes
+
+**Cyberpunk** (cyan/magenta), **Synthwave** (orange/purple), **Matrix** (green), and **Ice** (blue/white). Press `T` to cycle. Here's Nebula again under Synthwave — same geometry, completely different mood:
+
+![Synthwave theme](img/synthwave.png)
 
 ---
 
@@ -124,3 +134,7 @@ Built with [Three.js](https://threejs.org/) r160 and the Web Audio API. No frame
 | Everything is a blown-out white blob | Sensitivity too high. Slide it down. |
 | Barely any movement on loud music | Sensitivity too low, or you're capturing a silent source. |
 | Choppy / low frame rate | Lower Glow, shrink the window, or switch from Nebula to Core. |
+
+## License
+
+MIT — see [LICENSE](LICENSE). Use it, fork it, rip the modes out for your own project.

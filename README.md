@@ -2,7 +2,7 @@
 
 A 3D, real-time sound visualizer that runs in your browser and reacts to **whatever your PC is already playing** — Spotify, YouTube, a game, your DAW, anything. No install, no build step, no virtual audio cables. It's one HTML file.
 
-Seven visual modes, nine color themes, mouse-orbit camera, and bloom that pulses on the beat.
+Eight visual modes, twelve color themes, mouse-orbit camera, and bloom that pulses on the beat.
 
 ![Nebula mode](img/nebula.png)
 
@@ -55,13 +55,13 @@ Practical consequences:
 |---|---|
 | Drag | Orbit the camera |
 | Scroll | Zoom in / out |
-| `1` – `7` | Switch visual mode |
+| `1` – `8` | Switch visual mode |
 | `T` | Cycle color theme |
 | `A` | Toggle auto-cycle |
 | `H` | Hide / show the UI panel |
 | `F` | Toggle fullscreen |
 
-Most modes slowly auto-rotate until the first time you drag the camera, then it stays where you put it. Switching modes resets the camera to that mode's preferred framing. Tunnel and Terrain deliberately don't auto-rotate — they're built around a fixed forward view.
+Most modes slowly auto-rotate until the first time you drag the camera, then it stays where you put it. Switching modes resets the camera to that mode's preferred framing. Tunnel, Terrain, and Drift deliberately don't auto-rotate — they're built around a fixed forward view.
 
 ### Panel controls
 
@@ -69,7 +69,7 @@ Most modes slowly auto-rotate until the first time you drag the camera, then it 
 - **Mode** and **Theme** — same as the keyboard shortcuts.
 - **Sensitivity** — the master gain on everything reactive. Turn it **up** for quiet or heavily-compressed tracks, **down** if loud passages look like a solid blown-out wall. This is the single most useful knob; expect to touch it when you change genres.
 - **Glow** — bloom intensity. Low values look sharp and technical, high values look hazy and dreamlike.
-- **Auto-cycle** — hands-off mode: rotates through all seven visuals every 30 seconds and advances the theme every 95 seconds. This is what you want for a second monitor.
+- **Auto-cycle** — hands-off mode: rotates through all eight visuals every 30 seconds and advances the theme every 95 seconds. This is what you want for a second monitor.
 - The bar meters at the bottom show live bass / mid / treble levels. If they're flat while music is playing, the audio source isn't connected — recheck the share dialog.
 
 ---
@@ -102,9 +102,17 @@ Most modes slowly auto-rotate until the first time you drag the camera, then it 
 
 ![Attractor mode](img/attractor.png)
 
+**8 · Drift** — the chill one, built for lounge, downtempo and lo-fi. It's a spectrogram like Terrain, but tuned the opposite way: a **24-second** window instead of four, rows that are time-averaged rather than instantaneous, gentle relief instead of jagged peaks, and no beat reactions at all. Quiet music that makes Terrain look like a flat line builds slow, rolling dunes here — you can watch a whole phrase drift past. Dust motes float through it, and the camera sways instead of orbiting.
+
+Because it averages ~5 frames into every row and tilts gain upward across the spectrum, soft brushed hi-hats and vinyl crackle register as visible texture rather than vanishing under the bassline. Pair it with the **Lo-Fi**, **Twilight**, or **Sage** palettes.
+
+![Drift mode](img/drift.png)
+
 ### Themes
 
-Nine palettes: **Cyberpunk** (cyan/magenta), **Synthwave** (orange/purple), **Matrix** (green), **Ice** (blue/white), **Inferno** (fire), **Toxic** (acid green), **Vaporwave** (pink/teal), **Aurora** (mint/violet), and **Ultraviolet** (deep purple/electric blue). Click a swatch or press `T` to cycle.
+Twelve palettes. The bright ones: **Cyberpunk** (cyan/magenta), **Synthwave** (orange/purple), **Matrix** (green), **Ice** (blue/white), **Inferno** (fire), **Toxic** (acid green), **Vaporwave** (pink/teal), **Aurora** (mint/violet), **Ultraviolet** (deep purple/electric blue).
+
+The muted ones, meant for quiet listening: **Lo-Fi** (warm amber/dusty rose), **Twilight** (soft blue/pink), **Sage** (mint/cream). Click a swatch or press `T` to cycle.
 
 Theme changes the whole mood, not just the hue. Here's Nebula under Synthwave — same geometry as the header image, completely different feel:
 
@@ -116,8 +124,9 @@ Theme changes the whole mood, not just the hue. Here's Nebula under Synthwave �
 
 - **Press `H` then `F`.** Hiding the UI and going fullscreen is what makes this feel like a real visualizer rather than a web demo. This is the intended way to actually use it.
 - **Put it on a second monitor with `A`.** Fullscreen it on a spare display, turn on auto-cycle, and leave it running while you work or play. It'll happily run for hours and never sit on the same visual for long.
-- **Match the mode to the music.** Sparse, slow tracks look best in Core or Vortex, where a single bass hit visibly deforms everything. Dense, busy tracks suit Nebula, City, or Terrain, which have enough elements to show detail. Four-on-the-floor dance music is what Vortex's beat shockwaves were built for.
-- **Terrain needs a few seconds.** It starts flat because its history buffer is empty — give it about four seconds to fill with music before judging it.
+- **Match the mode to the music.** Lounge, chill and lo-fi belong in **Drift** — the other modes are built around transients that this music doesn't have, and will mostly sit still. Sparse, slow tracks with real bass hits look best in Core or Vortex. Dense, busy tracks suit Nebula, City, or Terrain. Four-on-the-floor dance music is what Vortex's beat shockwaves were built for.
+- **The spectrogram modes need to warm up.** Both start flat because their history buffers are empty — about four seconds for Terrain, and a full **24 seconds** for Drift before the picture is complete. Drift is worth the wait; don't judge it at five seconds.
+- **Drift likes more sensitivity.** Chill music is quiet and often gently mastered. If the dunes look flat, push sensitivity to 1.5–2.0 — much more headroom than you'd want on the punchier modes.
 - **Sensitivity is genre-dependent.** Modern loudness-war masters sit near the sensitivity floor — drop to ~0.7. Classical, jazz, and vinyl rips often need 1.8+ to come alive.
 - **Fixing choppy playback:** the visualizer is GPU-bound. If it stutters, make a smaller browser window (fewer pixels), or drop Glow toward 0 — bloom is by far the most expensive effect. Attractor is the heaviest mode on the CPU (75,000 integration steps per frame); Core is the lightest.
 - **Verify your GPU is actually being used.** If everything is slow, check `chrome://gpu` for "Hardware accelerated" on WebGL. Some Windows setups run browsers on the integrated GPU; in Windows Settings → System → Display → Graphics, set your browser to High performance.
@@ -134,7 +143,8 @@ Everything lives in `index.html` — no build step, so edit and refresh.
 - **Camera presets** live in that same `MODES` registry: `pos` is the starting camera position, `min`/`max` clamp zoom, and `rot` is auto-rotate speed (`0` disables it). Note the vertical field of view is fixed, so on a widescreen monitor you get more horizontal room rather than a larger subject — that's why the distances are tuned fairly close.
 - **Change particle count:** `const N = this.N = 14000` in `Nebula`, `16000` in `Vortex`, `15000` in `Attractor`. Push them up on a strong GPU, down on a laptop.
 - **Change the city grid:** `const S = this.S = 25` in the `City` class. Note it's squared, so 40 means 1,600 blocks.
-- **Change how much history Terrain shows:** `this.rowDur = 0.042` (seconds per row) × `D = 90` rows ≈ 3.8 s. Raise `rowDur` for a longer, slower-scrolling window.
+- **Change how much history the spectrograms show:** `rowDur` (seconds per row) × `D` (rows) is the window. Terrain is `0.042 × 90 ≈ 3.8 s`; Drift is `0.2 × 120 = 24 s`. Raise `rowDur` for a longer, slower scroll.
+- **Rebalance Drift across the spectrum:** its `this.gain[i]` curve tilts response upward with frequency to offset music's natural 1/f falloff. Flatten it toward a constant if you want a literal, untilted spectrogram.
 - **Tune beat detection** in `AudioEngine.update()` — it compares current bass against a rolling 50-frame average with a 160 ms refractory period. Lower the `1.35` multiplier for more sensitive triggering. Vortex's shockwaves and the bloom pulse both key off this.
 
 ---
@@ -157,6 +167,7 @@ Built with [Three.js](https://threejs.org/) r160 and the Web Audio API. No frame
 | Everything is a blown-out white blob | Sensitivity too high. Slide it down. |
 | Barely any movement on loud music | Sensitivity too low, or you're capturing a silent source. |
 | Choppy / low frame rate | Lower Glow, shrink the window, or switch from Nebula to Core. |
+| Drift looks flat or empty | Give it the full 24 seconds to fill, then raise sensitivity — chill tracks are quiet. |
 
 ## License
 

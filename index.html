@@ -127,7 +127,7 @@
 </div>
 
 <div id="toast"></div>
-<div id="keys" class="hidden">drag orbit &nbsp;·&nbsp; scroll zoom &nbsp;·&nbsp; [1-7] mode &nbsp;·&nbsp; [T] theme &nbsp;·&nbsp; [A] auto &nbsp;·&nbsp; [H] hide ui &nbsp;·&nbsp; [F] fullscreen</div>
+<div id="keys" class="hidden">drag orbit &nbsp;·&nbsp; scroll zoom &nbsp;·&nbsp; [1-8] mode &nbsp;·&nbsp; [T] theme &nbsp;·&nbsp; [A] auto &nbsp;·&nbsp; [H] hide ui &nbsp;·&nbsp; [F] fullscreen</div>
 <div id="loadfail"></div>
 
 <script type="module">
@@ -150,6 +150,10 @@ const THEMES = [
   { name:'Vaporwave',   a:0xff6ad5, b:0x26d9ff, bg:0x0b0518, fog:0x1a0a2e },
   { name:'Aurora',      a:0x00ffc8, b:0x8a5cff, bg:0x01060c, fog:0x03141f },
   { name:'Ultraviolet', a:0x7b2cff, b:0x00e5ff, bg:0x05020f, fog:0x0c0524 },
+  // warmer, lower-contrast palettes that suit lounge / lo-fi listening
+  { name:'Lo-Fi',       a:0xffb37a, b:0xff7aa8, bg:0x0b0708, fog:0x1a0f10 },
+  { name:'Twilight',    a:0x7aa2ff, b:0xffb0d0, bg:0x05060f, fog:0x0c1024 },
+  { name:'Sage',        a:0x9fe0c0, b:0xe8d9a0, bg:0x040806, fog:0x0d1a14 },
 ];
 
 /* ============================================================ audio */
@@ -842,6 +846,125 @@ class Attractor extends VisualMode {
   }
 }
 
+/* ---------- 8. DRIFT — long-window spectrogram for quiet music ----------
+   Terrain's fast 3.8 s window suits transient-heavy tracks. This is the
+   opposite: a ~24 s window, time-averaged rows, gentle relief and no beat
+   reactions, so slow music builds texture instead of twitching.          */
+class Drift extends VisualMode {
+  constructor(theme) {
+    super(theme);
+    const W = this.W = 144, D = this.D = 120;
+    this.depth = 150;
+    this.rowSpacing = this.depth / (D - 1);
+    this.geo = new THREE.PlaneGeometry(190, this.depth, W - 1, D - 1);
+    this.geo.rotateX(-Math.PI / 2);
+    this.geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(W * D * 3), 3));
+    // normal blending, not additive: a dense surface would otherwise clip to white
+    this.mat = new THREE.MeshBasicMaterial({
+      vertexColors: true, transparent: true, opacity: 0.97, side: THREE.DoubleSide,
+    });
+    this.mesh = new THREE.Mesh(this.geo, this.mat);
+    this.group.add(this.mesh);
+
+    this.hist = new Float32Array(D * W);
+    this.p = 0;
+    this.acc = 0;
+    this.rowDur = 0.2;                        // 120 rows × 0.2 s ≈ 24 s of history
+    this.sum = new Float32Array(W);           // running average between row pushes
+    this.sumN = 0;
+    this.bin = new Uint16Array(W);
+    // music energy falls off roughly with 1/f, so tilt the gain upward across
+    // the spectrum — without this the bass end blows out and the treble half
+    // stays black, which wastes most of the width
+    this.gain = new Float32Array(W);
+    for (let i = 0; i < W; i++) {
+      const u = i / (W - 1);
+      this.bin[i]  = Math.floor(Math.pow(u, 2.0) * 640) + 1;
+      this.gain[i] = 0.45 + 1.45 * Math.pow(u, 0.85);
+    }
+
+    // slow dust motes, purely for atmosphere
+    const ND = this.ND = 550;
+    const dp = new Float32Array(ND * 3);
+    this.dSeed = new Float32Array(ND * 2);
+    for (let i = 0; i < ND; i++) {
+      dp[i*3]     = (Math.random() - 0.5) * 230;
+      dp[i*3 + 1] = Math.random() * 62 + 3;
+      dp[i*3 + 2] = (Math.random() - 0.5) * 190;
+      this.dSeed[i*2]     = Math.random() * Math.PI * 2;
+      this.dSeed[i*2 + 1] = 0.3 + Math.random() * 0.7;
+    }
+    this.dGeo = new THREE.BufferGeometry();
+    this.dGeo.setAttribute('position', new THREE.BufferAttribute(dp, 3));
+    this.dMat = new THREE.PointsMaterial({
+      color: theme.b, size: 0.55, transparent: true, opacity: 0.3,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+    });
+    this.group.add(new THREE.Points(this.dGeo, this.dMat));
+    scene.add(this.group);
+
+    this.cA = new THREE.Color(theme.a);
+    this.cB = new THREE.Color(theme.b);
+    this._c = new THREE.Color();
+  }
+  update(freq, L, dt, t, sens) {
+    const W = this.W, D = this.D;
+
+    // average every frame between pushes, with a light 3-tap smooth across
+    // frequency — a raw snapshot every 0.2 s would alias into visible stripes
+    for (let i = 0; i < W; i++) {
+      const b = this.bin[i];
+      const s = (freq[b - 1] + freq[b] * 2 + freq[b + 1]) / (4 * 255);
+      this.sum[i] += Math.min(1.6, s * this.gain[i] * sens);
+    }
+    this.sumN++;
+
+    this.acc += dt;
+    while (this.acc >= this.rowDur) {
+      this.acc -= this.rowDur;
+      this.p = (this.p - 1 + D) % D;
+      const base = this.p * W, n = Math.max(1, this.sumN);
+      for (let i = 0; i < W; i++) { this.hist[base + i] = this.sum[i] / n; this.sum[i] = 0; }
+      this.sumN = 0;
+    }
+    this.mesh.position.z = (this.acc / this.rowDur) * this.rowSpacing;
+
+    const pos = this.geo.attributes.position.array;
+    const col = this.geo.attributes.color.array;
+    for (let r = 0; r < D; r++) {
+      const src = ((this.p + r) % D) * W, dst = r * W;
+      const age = 1 - (r / D) * 0.25;          // older rows recede gently
+      for (let i = 0; i < W; i++) {
+        const a = this.hist[src + i];
+        const k = (dst + i) * 3;
+        pos[k + 1] = Math.pow(a, 1.25) * 11;
+        const b = (0.03 + Math.pow(Math.min(1, a * 1.2), 1.6) * 0.62) * age;
+        this._c.lerpColors(this.cA, this.cB, Math.min(1, Math.pow(a, 0.8) * 1.3));
+        col[k] = this._c.r * b; col[k+1] = this._c.g * b; col[k+2] = this._c.b * b;
+      }
+    }
+    this.geo.attributes.position.needsUpdate = true;
+    this.geo.attributes.color.needsUpdate = true;
+
+    const dp = this.dGeo.attributes.position.array;
+    for (let i = 0; i < this.ND; i++) {
+      const j = i * 3;
+      dp[j + 1] += dt * this.dSeed[i*2 + 1] * 0.7;
+      dp[j]     += Math.sin(t * 0.2 + this.dSeed[i*2]) * dt * 1.3;
+      if (dp[j + 1] > 68) {
+        dp[j + 1] = 2;
+        dp[j]     = (Math.random() - 0.5) * 230;
+        dp[j + 2] = (Math.random() - 0.5) * 190;
+      }
+    }
+    this.dGeo.attributes.position.needsUpdate = true;
+    this.dMat.opacity = 0.16 + Math.min(0.4, L.treble * sens * 0.45);
+
+    // a slow sway instead of orbiting, which would swing the sheet edge-on
+    this.group.rotation.y = Math.sin(t * 0.05) * 0.1;
+  }
+}
+
 /* ---------- mode registry: class + preferred camera framing ---------- */
 const MODES = [
   { name:'Nebula',    cls:Nebula,    cam:{ pos:[0,26,64],  min:12, max:220, rot:0.5  } },
@@ -851,6 +974,7 @@ const MODES = [
   { name:'Terrain',   cls:Terrain,   cam:{ pos:[0,46,110], min:14, max:300, rot:0    } },
   { name:'Vortex',    cls:Vortex,    cam:{ pos:[0,38,88],  min:10, max:260, rot:0.3  } },
   { name:'Attractor', cls:Attractor, cam:{ pos:[0,0,128],  min:14, max:340, rot:0.25 } },
+  { name:'Drift',     cls:Drift,     cam:{ pos:[0,34,104], min:14, max:320, rot:0    } },
 ];
 
 /* ============================================================ app state */

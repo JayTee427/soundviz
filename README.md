@@ -2,7 +2,7 @@
 
 A 3D, real-time sound visualizer that runs in your browser and reacts to **whatever your PC is already playing** — Spotify, YouTube, a game, your DAW, anything. No install, no build step, no virtual audio cables. It's one HTML file.
 
-Three visual modes, four color themes, mouse-orbit camera, and bloom that pulses on the beat.
+Seven visual modes, nine color themes, mouse-orbit camera, and bloom that pulses on the beat.
 
 ![Nebula mode](img/nebula.png)
 
@@ -55,12 +55,13 @@ Practical consequences:
 |---|---|
 | Drag | Orbit the camera |
 | Scroll | Zoom in / out |
-| `1` `2` `3` | Switch visual mode |
+| `1` – `7` | Switch visual mode |
 | `T` | Cycle color theme |
+| `A` | Toggle auto-cycle |
 | `H` | Hide / show the UI panel |
 | `F` | Toggle fullscreen |
 
-The camera slowly auto-rotates until the first time you drag it, then it stays where you put it. Reload the page to get the drift back.
+Most modes slowly auto-rotate until the first time you drag the camera, then it stays where you put it. Switching modes resets the camera to that mode's preferred framing. Tunnel and Terrain deliberately don't auto-rotate — they're built around a fixed forward view.
 
 ### Panel controls
 
@@ -68,6 +69,7 @@ The camera slowly auto-rotates until the first time you drag it, then it stays w
 - **Mode** and **Theme** — same as the keyboard shortcuts.
 - **Sensitivity** — the master gain on everything reactive. Turn it **up** for quiet or heavily-compressed tracks, **down** if loud passages look like a solid blown-out wall. This is the single most useful knob; expect to touch it when you change genres.
 - **Glow** — bloom intensity. Low values look sharp and technical, high values look hazy and dreamlike.
+- **Auto-cycle** — hands-off mode: rotates through all seven visuals every 30 seconds and advances the theme every 95 seconds. This is what you want for a second monitor.
 - The bar meters at the bottom show live bass / mid / treble levels. If they're flat while music is playing, the audio source isn't connected — recheck the share dialog.
 
 ---
@@ -84,9 +86,27 @@ The camera slowly auto-rotates until the first time you drag it, then it stays w
 
 ![Core mode](img/core.png)
 
+**4 · Tunnel** — an endless flythrough down a wireframe tube that snakes as it goes. Each ring is a frozen snapshot of the spectrum taken the moment it spawned at the far end, so you are literally flying backwards through the last few seconds of the track. Bass carves the bulge; the whole tube twists faster as the mids rise.
+
+![Tunnel mode](img/tunnel.png)
+
+**5 · Terrain** — a scrolling spectrogram rendered as landscape. Frequency runs left-to-right, time runs toward you, and amplitude is elevation, so a sustained bassline builds a ridge you watch travel the length of the valley. Roughly four seconds of history is on screen at once. The most *readable* mode — you can pick out song structure in the hills.
+
+![Terrain mode](img/terrain.png)
+
+**6 · Vortex** — an accretion disk falling into a black hole. Particles orbit on a genuine Keplerian profile (angular speed ∝ r^-1.5), so the inner disk shears visibly against the rim. Bass drags the whole disk inward, and every detected beat fires a shockwave ring that lifts particles as it passes.
+
+![Vortex mode](img/vortex.png)
+
+**7 · Attractor** — a live Lorenz strange attractor, 15,000 particles integrated through the chaos equations every frame. The music drives the parameters: mids push **ρ** (how violently it churns), treble bends **σ**, and overall energy sets the tempo. Colour tracks each particle's velocity, so the slow fixed-point cores glow one colour and the fast outer sweeps another. Never repeats — that's the whole point of a strange attractor.
+
+![Attractor mode](img/attractor.png)
+
 ### Themes
 
-**Cyberpunk** (cyan/magenta), **Synthwave** (orange/purple), **Matrix** (green), and **Ice** (blue/white). Press `T` to cycle. Here's Nebula again under Synthwave — same geometry, completely different mood:
+Nine palettes: **Cyberpunk** (cyan/magenta), **Synthwave** (orange/purple), **Matrix** (green), **Ice** (blue/white), **Inferno** (fire), **Toxic** (acid green), **Vaporwave** (pink/teal), **Aurora** (mint/violet), and **Ultraviolet** (deep purple/electric blue). Click a swatch or press `T` to cycle.
+
+Theme changes the whole mood, not just the hue. Here's Nebula under Synthwave — same geometry as the header image, completely different feel:
 
 ![Synthwave theme](img/synthwave.png)
 
@@ -95,10 +115,11 @@ The camera slowly auto-rotates until the first time you drag it, then it stays w
 ## Tips
 
 - **Press `H` then `F`.** Hiding the UI and going fullscreen is what makes this feel like a real visualizer rather than a web demo. This is the intended way to actually use it.
-- **Put it on a second monitor.** Fullscreen it on a spare display and leave it running while you work or play. It'll happily run for hours.
-- **Match the mode to the music.** Sparse, slow tracks look best in Core, where a single bass hit visibly deforms the geometry. Dense, busy tracks look better in Nebula or City, which have enough elements to show detail.
+- **Put it on a second monitor with `A`.** Fullscreen it on a spare display, turn on auto-cycle, and leave it running while you work or play. It'll happily run for hours and never sit on the same visual for long.
+- **Match the mode to the music.** Sparse, slow tracks look best in Core or Vortex, where a single bass hit visibly deforms everything. Dense, busy tracks suit Nebula, City, or Terrain, which have enough elements to show detail. Four-on-the-floor dance music is what Vortex's beat shockwaves were built for.
+- **Terrain needs a few seconds.** It starts flat because its history buffer is empty — give it about four seconds to fill with music before judging it.
 - **Sensitivity is genre-dependent.** Modern loudness-war masters sit near the sensitivity floor — drop to ~0.7. Classical, jazz, and vinyl rips often need 1.8+ to come alive.
-- **Fixing choppy playback:** the visualizer is GPU-bound. If it stutters, make a smaller browser window (fewer pixels), or drop Glow toward 0 — bloom is by far the most expensive effect. Nebula is the heaviest mode, Core the lightest.
+- **Fixing choppy playback:** the visualizer is GPU-bound. If it stutters, make a smaller browser window (fewer pixels), or drop Glow toward 0 — bloom is by far the most expensive effect. Attractor is the heaviest mode on the CPU (75,000 integration steps per frame); Core is the lightest.
 - **Verify your GPU is actually being used.** If everything is slow, check `chrome://gpu` for "Hardware accelerated" on WebGL. Some Windows setups run browsers on the integrated GPU; in Windows Settings → System → Display → Graphics, set your browser to High performance.
 - **Sharing a browser tab instead of the whole screen** gives you cleaner audio when you want to visualize one source and ignore system notification sounds.
 
@@ -108,11 +129,13 @@ The camera slowly auto-rotates until the first time you drag it, then it stays w
 
 Everything lives in `index.html` — no build step, so edit and refresh.
 
-- **Add a theme:** append an entry to the `THEMES` array near the top of the script. Each has an accent color `a`, secondary `b`, background `bg`, and fog color, all as hex numbers. The UI picks up new entries automatically, though you'll want to add a matching button in the Theme row.
-- **Change particle count:** `const N = this.N = 14000` in the `Nebula` class. Push it to 40,000 on a strong GPU, drop to 5,000 on a laptop.
-- **Change the city grid:** `const S = this.S = 25` in the `City` class. Note it's the square of this, so 40 means 1,600 blocks.
-- **Add your own mode:** subclass `VisualMode`, build your geometry in the constructor, and implement `update(freq, levels, dt, t, sensitivity)`. `freq` is the raw 1024-bin FFT as a `Uint8Array`; `levels` gives you smoothed `bass` / `mid` / `treble` / `energy` floats plus a `beat` boolean. Then add your class to the `MODES` array and drop a button in the Mode row.
-- **Tune beat detection** in `AudioEngine.update()` — it compares current bass against a rolling 50-frame average with a 160 ms refractory period. Lower the `1.35` multiplier for more sensitive triggering.
+- **Add a theme:** append an entry to the `THEMES` array near the top of the script — an accent color `a`, secondary `b`, background `bg`, and fog color, all as hex numbers. The swatch row builds itself from that array, so a new palette shows up in the UI with no other changes.
+- **Add your own mode:** subclass `VisualMode`, build geometry in the constructor, and implement `update(freq, levels, dt, t, sensitivity)`. `freq` is the raw 1024-bin FFT as a `Uint8Array`; `levels` gives you smoothed `bass` / `mid` / `treble` / `energy` floats plus a `beat` boolean. Then add one entry to the `MODES` registry with your class and a camera preset — the buttons and number-key bindings are generated from it.
+- **Camera presets** live in that same `MODES` registry: `pos` is the starting camera position, `min`/`max` clamp zoom, and `rot` is auto-rotate speed (`0` disables it). Note the vertical field of view is fixed, so on a widescreen monitor you get more horizontal room rather than a larger subject — that's why the distances are tuned fairly close.
+- **Change particle count:** `const N = this.N = 14000` in `Nebula`, `16000` in `Vortex`, `15000` in `Attractor`. Push them up on a strong GPU, down on a laptop.
+- **Change the city grid:** `const S = this.S = 25` in the `City` class. Note it's squared, so 40 means 1,600 blocks.
+- **Change how much history Terrain shows:** `this.rowDur = 0.042` (seconds per row) × `D = 90` rows ≈ 3.8 s. Raise `rowDur` for a longer, slower-scrolling window.
+- **Tune beat detection** in `AudioEngine.update()` — it compares current bass against a rolling 50-frame average with a 160 ms refractory period. Lower the `1.35` multiplier for more sensitive triggering. Vortex's shockwaves and the bloom pulse both key off this.
 
 ---
 

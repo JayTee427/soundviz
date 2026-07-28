@@ -67,7 +67,7 @@ Most modes slowly auto-rotate until the first time you drag the camera, then it 
 
 - **Source** — switch between System / Mic / Demo at any time without reloading.
 - **Mode** and **Theme** — same as the keyboard shortcuts.
-- **Sensitivity** — the master gain on everything reactive. Turn it **up** for quiet or heavily-compressed tracks, **down** if loud passages look like a solid blown-out wall. This is the single most useful knob; expect to touch it when you change genres.
+- **Sensitivity** — the master gain on everything reactive, applied on top of a slow automatic level control (watch the `agc` readout in the status area). The auto-gain absorbs the difference between loud sources like YouTube and quiet ones, so treat this slider as taste — **up** for more drama, **down** for a calmer picture — rather than something you must correct per source.
 - **Glow** — bloom intensity. Low values look sharp and technical, high values look hazy and dreamlike.
 - **Backdrop** — load your own image to sit behind the visuals (see below).
 - **Auto-cycle** — hands-off mode: rotates through all eleven visuals every 30 seconds and advances the theme every 95 seconds. This is what you want for a second monitor.

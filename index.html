@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NEON FLUX — 3D Sound Visualizer</title>
+<style>
+  :root{
+    --accent:#00f0ff;
+    --accent2:#ff00c8;
+    --panel:rgba(8,10,20,.78);
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{width:100%;height:100%;overflow:hidden;background:#03040a;color:#cfe9ff;
+    font-family:"Cascadia Code","Consolas",ui-monospace,monospace;}
+  canvas{display:block}
+
+  /* ---------- start overlay ---------- */
+  #overlay{position:fixed;inset:0;z-index:20;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:22px;text-align:center;
+    background:radial-gradient(ellipse at center,rgba(10,14,32,.92),rgba(2,3,8,.97));
+    backdrop-filter:blur(6px);padding:24px;}
+  #overlay h1{font-size:clamp(34px,6vw,64px);font-weight:700;letter-spacing:.35em;
+    text-indent:.35em;color:#fff;
+    text-shadow:0 0 12px var(--accent),0 0 40px var(--accent),0 0 80px var(--accent2);}
+  #overlay .sub{opacity:.75;max-width:560px;line-height:1.6;font-size:14px}
+  #overlay .btns{display:flex;gap:14px;flex-wrap:wrap;justify-content:center}
+  .bigbtn{padding:14px 26px;font:inherit;font-size:15px;letter-spacing:.12em;cursor:pointer;
+    color:#eafcff;background:rgba(0,240,255,.06);border:1px solid var(--accent);
+    border-radius:4px;transition:.18s;text-transform:uppercase}
+  .bigbtn:hover{background:rgba(0,240,255,.18);box-shadow:0 0 18px rgba(0,240,255,.55)}
+  .bigbtn.alt{border-color:var(--accent2);background:rgba(255,0,200,.06)}
+  .bigbtn.alt:hover{background:rgba(255,0,200,.16);box-shadow:0 0 18px rgba(255,0,200,.5)}
+  #overlay .hint{font-size:12px;opacity:.6;max-width:520px;line-height:1.7}
+  #overlay .hint b{color:var(--accent)}
+  #errmsg{color:#ff6b8a;font-size:13px;max-width:520px;line-height:1.6;min-height:1em}
+
+  /* ---------- HUD ---------- */
+  #hud{position:fixed;top:14px;left:14px;z-index:10;background:var(--panel);
+    border:1px solid rgba(0,240,255,.25);border-radius:6px;padding:14px 16px;
+    display:flex;flex-direction:column;gap:10px;min-width:250px;
+    box-shadow:0 0 24px rgba(0,0,0,.5);transition:opacity .25s}
+  #hud.hidden{opacity:0;pointer-events:none}
+  #hud .row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+  #hud label{font-size:10px;letter-spacing:.2em;opacity:.6;text-transform:uppercase;width:100%}
+  .chip{font:inherit;font-size:11px;padding:5px 10px;cursor:pointer;color:#bfefff;
+    background:transparent;border:1px solid rgba(0,240,255,.35);border-radius:3px;
+    letter-spacing:.06em;transition:.15s}
+  .chip:hover{background:rgba(0,240,255,.12)}
+  .chip.on{background:rgba(0,240,255,.22);border-color:var(--accent);color:#fff;
+    box-shadow:0 0 10px rgba(0,240,255,.45)}
+  input[type=range]{width:130px;accent-color:var(--accent)}
+  .sliderrow{display:flex;align-items:center;gap:8px;font-size:11px}
+  .sliderrow span{width:78px;opacity:.7;letter-spacing:.08em}
+  #status{font-size:10px;opacity:.55;letter-spacing:.08em;line-height:1.5}
+
+  #keys{position:fixed;bottom:12px;left:50%;transform:translateX(-50%);z-index:9;
+    font-size:11px;letter-spacing:.1em;opacity:.4;white-space:nowrap;
+    text-shadow:0 1px 3px #000;transition:opacity .25s}
+  #keys.hidden{opacity:0}
+  #loadfail{position:fixed;inset:auto 0 0 0;z-index:30;display:none;background:#3a0a18;
+    color:#ffd4de;padding:10px 16px;font-size:13px;text-align:center}
+</style>
+<script>
+  // Surface CDN load failures instead of a silent black screen.
+  window.__booted = false;
+  window.addEventListener('load', () => setTimeout(() => {
+    if (!window.__booted) {
+      const el = document.getElementById('loadfail');
+      el.style.display = 'block';
+      el.textContent = 'Could not load the Three.js library from the CDN — check your internet connection and reload.';
+    }
+  }, 6000));
+</script>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+
+<div id="overlay">
+  <h1>NEON FLUX</h1>
+  <div class="sub">A 3D reactive sound visualizer.<br>Pick an audio source to jack in.</div>
+  <div class="btns">
+    <button class="bigbtn" id="btnSystem">&#128266; System Audio</button>
+    <button class="bigbtn alt" id="btnMic">&#127908; Microphone</button>
+    <button class="bigbtn" id="btnDemo" style="border-color:#8f9bff;background:rgba(140,155,255,.06)">&#9654; Demo Signal</button>
+  </div>
+  <div class="hint">
+    <b>System Audio</b> hears whatever your PC is playing (Spotify, YouTube, anything).
+    When the share dialog opens, pick <b>Entire screen</b> and tick
+    <b>“Also share system audio”</b> — the video isn't used, only the sound.
+  </div>
+  <div id="errmsg"></div>
+</div>
+
+<div id="hud" class="hidden">
+  <div class="row"><label>Source</label>
+    <button class="chip" data-src="system">System</button>
+    <button class="chip" data-src="mic">Mic</button>
+    <button class="chip" data-src="demo">Demo</button>
+  </div>
+  <div class="row"><label>Mode</label>
+    <button class="chip" data-mode="0">Nebula</button>
+    <button class="chip" data-mode="1">City</button>
+    <button class="chip" data-mode="2">Core</button>
+  </div>
+  <div class="row"><label>Theme</label>
+    <button class="chip" data-theme="0">Cyberpunk</button>
+    <button class="chip" data-theme="1">Synthwave</button>
+    <button class="chip" data-theme="2">Matrix</button>
+    <button class="chip" data-theme="3">Ice</button>
+  </div>
+  <div class="sliderrow"><span>SENSITIVITY</span><input type="range" id="sens" min="0.3" max="3" step="0.05" value="1.15"></div>
+  <div class="sliderrow"><span>GLOW</span><input type="range" id="glow" min="0" max="2.5" step="0.05" value="1.1"></div>
+  <div id="status">no signal</div>
+</div>
+
+<div id="keys" class="hidden">drag orbit &nbsp;·&nbsp; scroll zoom &nbsp;·&nbsp; [1-3] mode &nbsp;·&nbsp; [T] theme &nbsp;·&nbsp; [H] hide ui &nbsp;·&nbsp; [F] fullscreen</div>
+<div id="loadfail"></div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls }   from 'three/addons/controls/OrbitControls.js';
+import { EffectComposer }  from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass }      from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+
+window.__booted = true;
+
+/* ============================================================ themes */
+const THEMES = [
+  { name:'Cyberpunk', a:0x00f0ff, b:0xff00c8, bg:0x03040a, fog:0x070518 },
+  { name:'Synthwave', a:0xff9a00, b:0xb400ff, bg:0x0a0312, fog:0x14031e },
+  { name:'Matrix',    a:0x00ff66, b:0x9dffb0, bg:0x010604, fog:0x02120a },
+  { name:'Ice',       a:0x66ccff, b:0xffffff, bg:0x020610, fog:0x04101f },
+];
+
+/* ============================================================ audio */
+class AudioEngine {
+  constructor() {
+    this.bins = 1024;
+    this.freq = new Uint8Array(this.bins);
+    this.mode = 'none';               // none | system | mic | demo
+    this.ctx = null; this.analyser = null;
+    this.stream = null; this.srcNode = null;
+    this.levels = { bass:0, mid:0, treble:0, energy:0, beat:false };
+    this._bassHist = new Float32Array(50);
+    this._bh = 0; this._lastBeat = 0;
+  }
+
+  _teardownStream() {
+    if (this.stream) { this.stream.getTracks().forEach(t => t.stop()); this.stream = null; }
+    if (this.srcNode) { try { this.srcNode.disconnect(); } catch(e){} this.srcNode = null; }
+  }
+
+  async _attach(stream) {
+    this._teardownStream();
+    if (!this.ctx) this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+    if (this.ctx.state === 'suspended') await this.ctx.resume();
+    if (!this.analyser) {
+      this.analyser = this.ctx.createAnalyser();
+      this.analyser.fftSize = this.bins * 2;
+      this.analyser.smoothingTimeConstant = 0.82;
+    }
+    this.stream = stream;
+    this.srcNode = this.ctx.createMediaStreamSource(stream);
+    this.srcNode.connect(this.analyser);   // analysis only — never to speakers
+  }
+
+  async useSystemAudio(onEnded) {
+    const stream = await navigator.mediaDevices.getDisplayMedia({
+      video: true,
+      audio: { echoCancellation:false, noiseSuppression:false, autoGainControl:false },
+    });
+    if (stream.getAudioTracks().length === 0) {
+      stream.getTracks().forEach(t => t.stop());
+      throw new Error('No audio track was shared. Pick "Entire screen" and tick "Also share system audio".');
+    }
+    await this._attach(stream);
+    stream.getAudioTracks()[0].addEventListener('ended', onEnded);
+    this.mode = 'system';
+  }
+
+  async useMic() {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation:false, noiseSuppression:false, autoGainControl:false },
+    });
+    await this._attach(stream);
+    this.mode = 'mic';
+  }
+
+  useDemo() { this._teardownStream(); this.mode = 'demo'; }
+
+  _demoFill(t) {
+    const f = this.freq, N = f.length;
+    const beat = Math.exp(-((t % 0.5) / 0.5) * 6);           // 120 bpm kick
+    const snare = ((t + 0.25) % 1) < 0.5 ? Math.exp(-(((t + 0.25) % 0.5) / 0.5) * 8) : 0;
+    const sweep = 0.5 + 0.5 * Math.sin(t * 0.45);
+    for (let i = 0; i < N; i++) {
+      const x = i / N;
+      let v = 200 * Math.exp(-x * 5.5) * (0.55 + 0.45 * Math.sin(t * 1.8 + x * 30 + Math.sin(t * 0.6) * 4));
+      v += beat * 230 * Math.exp(-x * 34);
+      v += snare * 110 * Math.exp(-((x - 0.22) ** 2) * 300);
+      v += (28 + 60 * sweep) * Math.exp(-((x - 0.6 - 0.25 * Math.sin(t * 0.3)) ** 2) * 60);
+      v += Math.random() * 26 * (0.25 + x);
+      f[i] = Math.min(255, Math.max(0, v));
+    }
+  }
+
+  update(t) {
+    if (this.mode === 'none') { this.freq.fill(0); return this.levels; }
+    if (this.mode === 'demo') this._demoFill(t);
+    else if (this.analyser) this.analyser.getByteFrequencyData(this.freq);
+
+    const f = this.freq, N = f.length;
+    const avg = (a, b) => { let s = 0; for (let i = a; i < b; i++) s += f[i]; return s / ((b - a) * 255); };
+    const L = this.levels;
+    L.bass   = avg(1, Math.floor(N * 0.04));
+    L.mid    = avg(Math.floor(N * 0.04), Math.floor(N * 0.35));
+    L.treble = avg(Math.floor(N * 0.35), Math.floor(N * 0.8));
+    L.energy = L.bass * 0.5 + L.mid * 0.35 + L.treble * 0.15;
+
+    // beat detection: bass spike vs. rolling average, 160 ms refractory
+    this._bassHist[this._bh++ % this._bassHist.length] = L.bass;
+    let m = 0; for (const v of this._bassHist) m += v; m /= this._bassHist.length;
+    const now = performance.now();
+    L.beat = L.bass > 0.16 && L.bass > m * 1.35 && (now - this._lastBeat) > 160;
+    if (L.beat) this._lastBeat = now;
+    return L;
+  }
+}
+
+/* ============================================================ renderer */
+const renderer = new THREE.WebGLRenderer({ antialias:true, powerPreference:'high-performance' });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 600);
+camera.position.set(0, 26, 64);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.06;
+controls.autoRotate = true;
+controls.autoRotateSpeed = 0.5;
+controls.minDistance = 12;
+controls.maxDistance = 220;
+controls.addEventListener('start', () => controls.autoRotate = false);
+
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 1.1, 0.65, 0.12);
+composer.addPass(bloom);
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+  composer.setSize(innerWidth, innerHeight);
+});
+
+/* ============================================================ visual modes */
+class VisualMode {
+  constructor(theme) { this.group = new THREE.Group(); this.theme = theme; }
+  dispose() {
+    this.group.traverse(o => {
+      if (o.geometry) o.geometry.dispose();
+      if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => m.dispose());
+    });
+    scene.remove(this.group);
+  }
+}
+
+/* ---------- 1. NEBULA — spiral particle galaxy ---------- */
+class Nebula extends VisualMode {
+  constructor(theme) {
+    super(theme);
+    const N = this.N = 14000;
+    this.baseR = new Float32Array(N);
+    this.baseA = new Float32Array(N);
+    this.baseY = new Float32Array(N);
+    this.seed  = new Float32Array(N);
+    this.bin   = new Uint16Array(N);
+    const pos = new Float32Array(N * 3);
+    const col = new Float32Array(N * 3);
+
+    for (let i = 0; i < N; i++) {
+      const r = Math.sqrt(Math.random()) * 46 + 2;
+      const arm = (i % 3) * (Math.PI * 2 / 3);
+      this.baseR[i] = r;
+      this.baseA[i] = arm + r * 0.11 + (Math.random() - 0.5) * (0.9 - r / 70);
+      this.baseY[i] = (Math.random() - 0.5) * (7 - r * 0.08) * Math.exp(-r / 40);
+      this.seed[i]  = Math.random() * Math.PI * 2;
+      // inner radius → bass bins, outer → treble; skew toward the musical low end
+      this.bin[i] = Math.floor(Math.pow(r / 48, 1.6) * 720) % 1024;
+    }
+    this.geo = new THREE.BufferGeometry();
+    this.geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    this.geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    this.mat = new THREE.PointsMaterial({
+      size: 0.55, vertexColors: true, sizeAttenuation: true,
+      blending: THREE.AdditiveBlending, depthWrite: false, transparent: true,
+    });
+    this.group.add(new THREE.Points(this.geo, this.mat));
+    scene.add(this.group);
+    this.cA = new THREE.Color(theme.a);
+    this.cB = new THREE.Color(theme.b);
+    this._c = new THREE.Color();
+    this.spin = 0;
+  }
+  update(freq, L, dt, t, sens) {
+    this.spin += dt * (0.05 + L.energy * 0.55);
+    const pos = this.geo.attributes.position.array;
+    const col = this.geo.attributes.color.array;
+    for (let i = 0; i < this.N; i++) {
+      const amp = Math.min(1.5, (freq[this.bin[i]] / 255) * sens);
+      const r = this.baseR[i] + amp * 9;
+      const a = this.baseA[i] + this.spin + amp * 0.22;
+      const j = i * 3;
+      pos[j]     = Math.cos(a) * r;
+      pos[j + 1] = this.baseY[i] * (1 + amp * 2.4) + Math.sin(t * 1.4 + this.seed[i]) * 0.5;
+      pos[j + 2] = Math.sin(a) * r;
+      const b = 0.14 + amp * 1.05;
+      this._c.lerpColors(this.cA, this.cB, Math.min(1, amp * 1.15));
+      col[j] = this._c.r * b; col[j + 1] = this._c.g * b; col[j + 2] = this._c.b * b;
+    }
+    this.geo.attributes.position.needsUpdate = true;
+    this.geo.attributes.color.needsUpdate = true;
+    if (L.beat) this.mat.size = 0.95;
+    this.mat.size += (0.55 - this.mat.size) * Math.min(1, dt * 6);
+  }
+}
+
+/* ---------- 2. CITY — cyberpunk spectrum skyline ---------- */
+class City extends VisualMode {
+  constructor(theme) {
+    super(theme);
+    const S = this.S = 25, count = S * S;
+    this.mesh = new THREE.InstancedMesh(
+      new THREE.BoxGeometry(1.55, 1, 1.55),
+      new THREE.MeshBasicMaterial({ toneMapped: false }),
+      count
+    );
+    this.mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(count * 3), 3);
+    this.bin = new Uint16Array(count);
+    this.dmy = new THREE.Object3D();
+    let k = 0;
+    const half = (S - 1) / 2;
+    for (let gx = 0; gx < S; gx++) for (let gz = 0; gz < S; gz++, k++) {
+      const dx = (gx - half) / half, dz = (gz - half) / half;
+      const d = Math.min(1, Math.hypot(dx, dz));
+      this.bin[k] = Math.floor(Math.pow(d, 2.1) * 760) % 1024;
+    }
+    this.group.add(this.mesh);
+    const grid = new THREE.GridHelper(120, 40, theme.a, theme.fog);
+    grid.material.transparent = true; grid.material.opacity = 0.16;
+    grid.position.y = -0.05;
+    this.group.add(grid);
+    scene.add(this.group);
+    this.cA = new THREE.Color(theme.a);
+    this.cB = new THREE.Color(theme.b);
+    this._c = new THREE.Color();
+    this.h = new Float32Array(count).fill(0.3);
+  }
+  update(freq, L, dt, t, sens) {
+    const S = this.S, half = (S - 1) / 2;
+    let k = 0;
+    const lerp = Math.min(1, dt * 11);
+    for (let gx = 0; gx < S; gx++) for (let gz = 0; gz < S; gz++, k++) {
+      const amp = Math.min(1.6, (freq[this.bin[k]] / 255) * sens);
+      const target = 0.25 + Math.pow(amp, 1.5) * 26;
+      this.h[k] += (target - this.h[k]) * lerp;
+      const hgt = this.h[k];
+      this.dmy.position.set((gx - half) * 2.1, hgt / 2, (gz - half) * 2.1);
+      this.dmy.scale.set(1, hgt, 1);
+      this.dmy.updateMatrix();
+      this.mesh.setMatrixAt(k, this.dmy.matrix);
+      const b = 0.035 + Math.pow(Math.min(1, amp), 1.7) * 0.8 + (L.beat ? 0.12 : 0);
+      this._c.lerpColors(this.cA, this.cB, Math.min(1, amp));
+      this.mesh.setColorAt(k, this._c.multiplyScalar(b));
+    }
+    this.mesh.instanceMatrix.needsUpdate = true;
+    this.mesh.instanceColor.needsUpdate = true;
+    this.group.rotation.y += dt * (0.04 + L.energy * 0.18);
+  }
+}
+
+/* ---------- 3. CORE — bass-reactive plasma sphere ---------- */
+class Core extends VisualMode {
+  constructor(theme) {
+    super(theme);
+    this.geo = new THREE.IcosahedronGeometry(11, 4);
+    this.orig = this.geo.attributes.position.array.slice();
+    this.mat = new THREE.MeshStandardMaterial({
+      color: 0x05060a, emissive: theme.a, emissiveIntensity: 0.2,
+      roughness: 0.35, metalness: 0.55, flatShading: true,
+    });
+    this.sphere = new THREE.Mesh(this.geo, this.mat);
+    this.group.add(this.sphere);
+
+    // neon lattice over the same displaced geometry
+    this.wireMat = new THREE.MeshBasicMaterial({
+      wireframe: true, transparent: true, opacity: 0.3,
+      blending: THREE.AdditiveBlending, depthWrite: false, color: theme.a,
+    });
+    this.wire = new THREE.Mesh(this.geo, this.wireMat);
+    this.wire.scale.setScalar(1.004);
+    this.sphere.add(this.wire);
+
+    this.shell = new THREE.Mesh(
+      new THREE.IcosahedronGeometry(17, 1),
+      new THREE.MeshBasicMaterial({ color: theme.b, wireframe: true, transparent: true, opacity: 0.14 })
+    );
+    this.group.add(this.shell);
+
+    // treble sparkles on an orbiting halo
+    const NS = this.NS = 700;
+    const sp = new Float32Array(NS * 3);
+    this.sSeed = new Float32Array(NS);
+    for (let i = 0; i < NS; i++) {
+      const v = new THREE.Vector3().randomDirection().multiplyScalar(20 + Math.random() * 9);
+      sp.set([v.x, v.y, v.z], i * 3);
+      this.sSeed[i] = Math.random() * Math.PI * 2;
+    }
+    this.sGeo = new THREE.BufferGeometry();
+    this.sGeo.setAttribute('position', new THREE.BufferAttribute(sp, 3));
+    this.sMat = new THREE.PointsMaterial({
+      color: theme.b, size: 0.35, blending: THREE.AdditiveBlending,
+      depthWrite: false, transparent: true, opacity: 0.6,
+    });
+    this.sparkles = new THREE.Points(this.sGeo, this.sMat);
+    this.group.add(this.sparkles);
+
+    this.light = new THREE.PointLight(theme.a, 60, 300);
+    this.light.position.set(26, 32, 22);
+    this.group.add(this.light);
+    this.light2 = new THREE.PointLight(theme.b, 40, 300);
+    this.light2.position.set(-30, -18, -24);
+    this.group.add(this.light2);
+    this.group.add(new THREE.AmbientLight(0x111122, 2));
+    scene.add(this.group);
+    this.cA = new THREE.Color(theme.a);
+    this.cB = new THREE.Color(theme.b);
+  }
+  update(freq, L, dt, t, sens) {
+    const pos = this.geo.attributes.position.array, o = this.orig;
+    const bass = Math.min(1.5, L.bass * sens), mid = Math.min(1.5, L.mid * sens);
+    for (let i = 0; i < pos.length; i += 3) {
+      const x = o[i], y = o[i + 1], z = o[i + 2];
+      const n = Math.sin(x * 0.42 + t * 2.1) * Math.sin(y * 0.47 - t * 1.7) * Math.sin(z * 0.44 + t * 1.3);
+      const d = 1 + bass * 0.5 + n * (0.09 + mid * 0.85);
+      pos[i] = x * d; pos[i + 1] = y * d; pos[i + 2] = z * d;
+    }
+    this.geo.attributes.position.needsUpdate = true;
+    this.geo.computeVertexNormals();
+
+    this.mat.emissiveIntensity = 0.02 + L.energy * 0.22;
+    this.mat.emissive.lerpColors(this.cA, this.cB, Math.min(1, L.mid * sens * 1.4));
+    this.wireMat.color.lerpColors(this.cA, this.cB, Math.min(1, L.bass * sens));
+    this.wireMat.opacity = 0.14 + Math.min(0.6, L.mid * sens * 0.9);
+    this.light.intensity = 30 + L.energy * 320;
+    this.light2.intensity = 20 + L.bass * 260;
+    this.shell.rotation.y += dt * 0.25; this.shell.rotation.x += dt * 0.1;
+    this.shell.material.opacity = 0.08 + L.treble * sens * 0.5;
+    this.sphere.rotation.y += dt * 0.15;
+    this.sparkles.rotation.y -= dt * 0.12;
+    this.sMat.opacity = 0.15 + Math.min(0.85, L.treble * sens * 2.2);
+    this.sMat.size = 0.3 + L.treble * sens * 1.1;
+    if (L.beat) this.group.scale.setScalar(1.06);
+    this.group.scale.lerp(new THREE.Vector3(1, 1, 1), Math.min(1, dt * 7));
+  }
+}
+
+const MODES = [Nebula, City, Core];
+
+/* ============================================================ app state */
+const audio = new AudioEngine();
+let themeIdx = 0, modeIdx = 0, visual = null;
+let sens = 1.15;
+const $ = s => document.querySelector(s);
+
+function applyTheme() {
+  const th = THEMES[themeIdx];
+  scene.background = new THREE.Color(th.bg);
+  scene.fog = new THREE.FogExp2(th.fog, 0.0035);
+  const hex = '#' + th.a.toString(16).padStart(6, '0');
+  const hex2 = '#' + th.b.toString(16).padStart(6, '0');
+  document.documentElement.style.setProperty('--accent', hex);
+  document.documentElement.style.setProperty('--accent2', hex2);
+}
+function setMode(i) {
+  modeIdx = i;
+  if (visual) visual.dispose();
+  visual = new MODES[i](THEMES[themeIdx]);
+  syncChips();
+}
+function setTheme(i) { themeIdx = i; applyTheme(); setMode(modeIdx); }
+function syncChips() {
+  document.querySelectorAll('[data-mode]').forEach(b => b.classList.toggle('on', +b.dataset.mode === modeIdx));
+  document.querySelectorAll('[data-theme]').forEach(b => b.classList.toggle('on', +b.dataset.theme === themeIdx));
+  document.querySelectorAll('[data-src]').forEach(b => b.classList.toggle('on', b.dataset.src === audio.mode));
+}
+
+/* ---------- audio source switching ---------- */
+const errEl = $('#errmsg'), statusEl = $('#status');
+function showOverlay(msg) {
+  $('#overlay').style.display = 'flex';
+  errEl.textContent = msg || '';
+}
+function hideOverlay() {
+  $('#overlay').style.display = 'none';
+  $('#hud').classList.remove('hidden');
+  $('#keys').classList.remove('hidden');
+}
+async function pickSource(src) {
+  errEl.textContent = '';
+  try {
+    if (src === 'system')  await audio.useSystemAudio(() => showOverlay('System audio share ended — pick a source.'));
+    else if (src === 'mic') await audio.useMic();
+    else audio.useDemo();
+    hideOverlay();
+    statusEl.textContent = 'source: ' + audio.mode;
+    syncChips();
+  } catch (e) {
+    const msg = e.name === 'NotAllowedError'
+      ? 'Permission denied — allow access and try again.'
+      : (e.message || String(e));
+    if ($('#overlay').style.display !== 'none') errEl.textContent = msg;
+    else statusEl.textContent = 'error: ' + msg;
+  }
+}
+$('#btnSystem').onclick = () => pickSource('system');
+$('#btnMic').onclick    = () => pickSource('mic');
+$('#btnDemo').onclick   = () => pickSource('demo');
+document.querySelectorAll('[data-src]').forEach(b => b.onclick = () => pickSource(b.dataset.src));
+document.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => setMode(+b.dataset.mode));
+document.querySelectorAll('[data-theme]').forEach(b => b.onclick = () => setTheme(+b.dataset.theme));
+$('#sens').oninput = e => sens = +e.target.value;
+$('#glow').oninput = e => bloom.strength = +e.target.value;
+
+addEventListener('keydown', e => {
+  if (e.key >= '1' && e.key <= '3') setMode(+e.key - 1);
+  else if (e.key === 't' || e.key === 'T') setTheme((themeIdx + 1) % THEMES.length);
+  else if (e.key === 'h' || e.key === 'H') {
+    $('#hud').classList.toggle('hidden');
+    $('#keys').classList.toggle('hidden');
+  }
+  else if (e.key === 'f' || e.key === 'F') {
+    document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen();
+  }
+});
+
+/* ============================================================ main loop */
+applyTheme();
+setMode(0);
+let baseGlow = 1.1, beatGlow = 0;
+$('#glow').oninput = e => { baseGlow = +e.target.value; };
+const clock = new THREE.Clock();
+
+function loop() {
+  requestAnimationFrame(loop);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  const t = clock.elapsedTime;
+  const L = audio.update(t);
+
+  if (L.beat) beatGlow = 0.55;
+  beatGlow *= Math.exp(-dt * 5);
+  bloom.strength = baseGlow + beatGlow + L.energy * 0.4;
+
+  if (visual) visual.update(audio.freq, L, dt, t, sens);
+  if (audio.mode !== 'none') {
+    statusEl.textContent =
+      `source: ${audio.mode}   bass ${'█'.repeat(Math.round(L.bass * 8)).padEnd(8, '░')}` +
+      `  mid ${'█'.repeat(Math.round(L.mid * 8)).padEnd(8, '░')}` +
+      `  hi ${'█'.repeat(Math.round(L.treble * 8)).padEnd(8, '░')}`;
+  }
+  controls.update();
+  composer.render();
+}
+loop();
+</script>
+</body>
+</html>

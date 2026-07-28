@@ -122,12 +122,18 @@
   </div>
   <div class="sliderrow"><span>SENSITIVITY</span><input type="range" id="sens" min="0.3" max="3" step="0.05" value="1.15"></div>
   <div class="sliderrow"><span>GLOW</span><input type="range" id="glow" min="0" max="2.5" step="0.05" value="1.1"></div>
+  <div class="row"><label>Backdrop</label>
+    <button class="chip" id="bgLoad">Image&hellip;</button>
+    <button class="chip" id="bgClear">Clear</button>
+  </div>
+  <div class="sliderrow"><span>OPACITY</span><input type="range" id="bgOp" min="0" max="1" step="0.02" value="0.3"></div>
+  <input type="file" id="bgFile" accept="image/*" hidden>
   <div class="row"><button class="chip" id="autoBtn">&#8635; Auto-cycle</button></div>
   <div id="status">no signal</div>
 </div>
 
 <div id="toast"></div>
-<div id="keys" class="hidden">drag orbit &nbsp;·&nbsp; scroll zoom &nbsp;·&nbsp; [1-8] mode &nbsp;·&nbsp; [T] theme &nbsp;·&nbsp; [A] auto &nbsp;·&nbsp; [H] hide ui &nbsp;·&nbsp; [F] fullscreen</div>
+<div id="keys" class="hidden">drag orbit &nbsp;·&nbsp; scroll zoom &nbsp;·&nbsp; [1-9,0] mode &nbsp;·&nbsp; [T] theme &nbsp;·&nbsp; [A] auto &nbsp;·&nbsp; [H] hide ui &nbsp;·&nbsp; [F] fullscreen</div>
 <div id="loadfail"></div>
 
 <script type="module">
@@ -280,7 +286,57 @@ addEventListener('resize', () => {
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
   composer.setSize(innerWidth, innerHeight);
+  fitBackdrop();
 });
+
+/* ============================================================ backdrop
+   An optional user image behind everything. It hangs off the camera at a
+   fixed distance with depth testing off, so it never occludes the visuals
+   and never swings out of frame when the camera orbits. PNG alpha is kept,
+   so a transparent logo shows the theme background through it.
+   The file is read locally with FileReader — nothing is ever uploaded.  */
+const BG_DIST = 400, BG_KEY = 'neonflux.backdrop';
+let bgMesh = null, bgTex = null, bgOpacity = 0.3;
+scene.add(camera);                        // camera children only render if it's in the scene
+
+function fitBackdrop() {
+  if (!bgMesh || !bgTex || !bgTex.image) return;
+  const vh = 2 * BG_DIST * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+  const vw = vh * camera.aspect;
+  const ia = bgTex.image.width / bgTex.image.height;
+  // "contain" fit at 90%, so the whole graphic stays visible and clear of the
+  // edges — transparent margins simply show the theme background
+  const f = 0.9;
+  if (ia > vw / vh) bgMesh.scale.set(vw * f, (vw / ia) * f, 1);
+  else              bgMesh.scale.set((vh * ia) * f, vh * f, 1);
+}
+function clearBackdrop() {
+  if (bgMesh) {
+    camera.remove(bgMesh);
+    bgMesh.geometry.dispose();
+    bgMesh.material.dispose();
+    bgMesh = null;
+  }
+  if (bgTex) { bgTex.dispose(); bgTex = null; }
+}
+function setBackdrop(url, onFail) {
+  new THREE.TextureLoader().load(url, tex => {
+    clearBackdrop();
+    tex.colorSpace = THREE.SRGBColorSpace;
+    bgTex = tex;
+    bgMesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(1, 1),
+      new THREE.MeshBasicMaterial({
+        map: tex, transparent: true, opacity: bgOpacity,
+        depthTest: false, depthWrite: false, fog: false, toneMapped: false,
+      })
+    );
+    bgMesh.renderOrder = -1;              // drawn before the visuals
+    bgMesh.position.set(0, 0, -BG_DIST);
+    camera.add(bgMesh);
+    fitBackdrop();
+  }, undefined, () => { if (onFail) onFail(); });
+}
 
 /* ============================================================ visual modes */
 class VisualMode {
@@ -965,6 +1021,230 @@ class Drift extends VisualMode {
   }
 }
 
+/* ---------- 9. EQUALIZER — the classic bar EQ, built in 3D ----------
+   Straight row of bars with the two details that make a real EQ feel right:
+   peak-hold caps that hang then fall under gravity, and a mirrored
+   reflection below the floor line.                                      */
+class Equalizer extends VisualMode {
+  constructor(theme) {
+    super(theme);
+    const NB = this.NB = 56;
+    this.h = new Float32Array(NB);
+    this.peak = new Float32Array(NB);
+    this.peakV = new Float32Array(NB);
+    this.bin = new Uint16Array(NB);
+    for (let i = 0; i < NB; i++) this.bin[i] = Math.floor(Math.pow(i / (NB - 1), 1.9) * 740) + 2;
+
+    // vertical gradient baked into the box's vertex colors; the per-instance
+    // color multiplies it, so every bar gets a dim base and a hot tip
+    const bg = new THREE.BoxGeometry(1.5, 1, 1.5);
+    const bp = bg.attributes.position;
+    const bc = new Float32Array(bp.count * 3);
+    for (let i = 0; i < bp.count; i++) {
+      const s = 0.18 + (bp.getY(i) + 0.5) * 0.8;
+      bc[i*3] = s; bc[i*3+1] = s; bc[i*3+2] = s;
+    }
+    bg.setAttribute('color', new THREE.BufferAttribute(bc, 3));
+
+    const mat = () => new THREE.MeshBasicMaterial({
+      vertexColors: true, toneMapped: false, side: THREE.DoubleSide,
+    });
+    // instances 0..NB-1 are the bars, NB..2NB-1 are their reflections
+    this.bars = new THREE.InstancedMesh(bg, mat(), NB * 2);
+    this.bars.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(NB * 2 * 3), 3);
+    this.group.add(this.bars);
+
+    const cg = new THREE.BoxGeometry(1.5, 0.42, 1.5);
+    this.caps = new THREE.InstancedMesh(cg, new THREE.MeshBasicMaterial({ toneMapped: false }), NB * 2);
+    this.caps.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(NB * 2 * 3), 3);
+    this.group.add(this.caps);
+
+    scene.add(this.group);
+    this.dmy = new THREE.Object3D();
+    this.cA = new THREE.Color(theme.a);
+    this.cB = new THREE.Color(theme.b);
+    this._c = new THREE.Color();
+    this.spacing = 2.15;
+  }
+  update(freq, L, dt, t, sens) {
+    const NB = this.NB, half = (NB - 1) / 2;
+    const rise = Math.min(1, dt * 24), fall = Math.min(1, dt * 6);
+    for (let i = 0; i < NB; i++) {
+      const b = this.bin[i];
+      const raw = (freq[b - 1] + freq[b] * 2 + freq[b + 1]) / (4 * 255);
+      const amp = Math.min(1.6, raw * sens);
+      const target = Math.pow(amp, 1.35) * 32;
+      this.h[i] += (target - this.h[i]) * (target > this.h[i] ? rise : fall);
+      const hgt = Math.max(0.12, this.h[i]);
+
+      // peak cap: snaps up instantly, then falls under gravity
+      if (hgt >= this.peak[i]) { this.peak[i] = hgt; this.peakV[i] = 0; }
+      else { this.peakV[i] += dt * 26; this.peak[i] = Math.max(hgt, this.peak[i] - this.peakV[i] * dt); }
+
+      const x = (i - half) * this.spacing;
+      const lit = Math.min(1, hgt / 26);
+      this._c.lerpColors(this.cA, this.cB, lit);
+
+      // bar + reflection
+      this.dmy.position.set(x, hgt / 2, 0);
+      this.dmy.scale.set(1, hgt, 1);
+      this.dmy.updateMatrix();
+      this.bars.setMatrixAt(i, this.dmy.matrix);
+      this.bars.setColorAt(i, this._c.clone().multiplyScalar(0.3 + lit * 0.5));
+
+      this.dmy.position.set(x, -hgt / 2 - 0.6, 0);
+      this.dmy.scale.set(1, -hgt, 1);          // negative scale flips the gradient too
+      this.dmy.updateMatrix();
+      this.bars.setMatrixAt(NB + i, this.dmy.matrix);
+      this.bars.setColorAt(NB + i, this._c.clone().multiplyScalar((0.3 + lit * 0.5) * 0.32));
+
+      // cap + reflection
+      this._c.lerpColors(this.cA, this.cB, Math.min(1, this.peak[i] / 26));
+      this.dmy.position.set(x, this.peak[i] + 0.5, 0);
+      this.dmy.scale.set(1, 1, 1);
+      this.dmy.updateMatrix();
+      this.caps.setMatrixAt(i, this.dmy.matrix);
+      this.caps.setColorAt(i, this._c.clone().multiplyScalar(0.75 + (L.beat ? 0.35 : 0)));
+
+      this.dmy.position.set(x, -this.peak[i] - 1.1, 0);
+      this.dmy.updateMatrix();
+      this.caps.setMatrixAt(NB + i, this.dmy.matrix);
+      this.caps.setColorAt(NB + i, this._c.clone().multiplyScalar(0.28));
+    }
+    this.bars.instanceMatrix.needsUpdate = true;
+    this.bars.instanceColor.needsUpdate = true;
+    this.caps.instanceMatrix.needsUpdate = true;
+    this.caps.instanceColor.needsUpdate = true;
+  }
+}
+
+/* ---------- 10. SINGULARITY — particles falling into a black hole ----------
+   Unlike Vortex (a stable flat disk), these stream in from every direction
+   under inverse-square gravity, stretch into streaks as they accelerate,
+   and are destroyed at the horizon — which brightens as it feeds.        */
+class Singularity extends VisualMode {
+  constructor(theme) {
+    super(theme);
+    const N = this.N = 11000;
+    this.p = new Float32Array(N * 3);
+    this.v = new Float32Array(N * 3);
+    this.pos = new Float32Array(N * 2 * 3);   // one segment (prev → cur) each
+    this.col = new Float32Array(N * 2 * 3);
+    this.G = 5200;
+    this.horizon = 4.6;
+    this.surge = 0;
+    this.eaten = 0;
+    this.glow = 0;
+    for (let i = 0; i < N; i++) this._spawn(i);
+
+    this.geo = new THREE.BufferGeometry();
+    this.geo.setAttribute('position', new THREE.BufferAttribute(this.pos, 3));
+    this.geo.setAttribute('color', new THREE.BufferAttribute(this.col, 3));
+    this.mat = new THREE.LineBasicMaterial({
+      vertexColors: true, transparent: true, opacity: 0.9,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+    });
+    this.group.add(new THREE.LineSegments(this.geo, this.mat));
+
+    this.hole = new THREE.Mesh(
+      new THREE.SphereGeometry(this.horizon, 32, 24),
+      new THREE.MeshBasicMaterial({ color: 0x000000 })
+    );
+    this.group.add(this.hole);
+    // photon ring, billboarded so it always reads as a ring around the hole
+    this.ring = new THREE.Mesh(
+      new THREE.RingGeometry(this.horizon * 1.16, this.horizon * 1.30, 96),
+      new THREE.MeshBasicMaterial({
+        color: theme.b, transparent: true, opacity: 0.85, side: THREE.DoubleSide,
+        blending: THREE.AdditiveBlending, depthWrite: false,
+      })
+    );
+    this.group.add(this.ring);
+    scene.add(this.group);
+
+    this.cA = new THREE.Color(theme.a);
+    this.cB = new THREE.Color(theme.b);
+    this._c = new THREE.Color();
+  }
+  _spawn(i) {
+    const j = i * 3;
+    // random point on a far shell
+    let x, y, z, d2;
+    do {
+      x = Math.random() * 2 - 1; y = Math.random() * 2 - 1; z = Math.random() * 2 - 1;
+      d2 = x*x + y*y + z*z;
+    } while (d2 > 1 || d2 < 1e-4);
+    const d = Math.sqrt(d2);
+    const r = 46 + Math.random() * 68;
+    x = x/d*r; y = y/d*r; z = z/d*r;
+    this.p[j] = x; this.p[j+1] = y; this.p[j+2] = z;
+
+    // mostly tangential, but under circular speed so the orbit decays inward
+    let tx = -y, ty = x, tz = 0;
+    if (Math.abs(x) < 1e-3 && Math.abs(y) < 1e-3) { tx = 1; ty = 0; }
+    const tl = Math.hypot(tx, ty, tz) || 1;
+    const vc = Math.sqrt(this.G / r) * (0.42 + Math.random() * 0.42);
+    this.v[j]   = tx/tl*vc - x/r * (2 + Math.random() * 5);
+    this.v[j+1] = ty/tl*vc - y/r * (2 + Math.random() * 5);
+    this.v[j+2] = tz/tl*vc - z/r * (2 + Math.random() * 5) + (Math.random() - 0.5) * vc * 0.5;
+  }
+  update(freq, L, dt, t, sens) {
+    if (L.beat) this.surge = 1;
+    this.surge *= Math.exp(-dt * 2.2);
+    const G = this.G * (1 + this.surge * 0.7 + L.bass * sens * 0.5);
+    const step = dt * (1 + L.energy * sens * 1.6);
+    const hz2 = this.horizon * this.horizon;
+    const p = this.p, v = this.v, pos = this.pos, col = this.col;
+    let eatenThisFrame = 0;
+
+    for (let i = 0; i < this.N; i++) {
+      const j = i * 3, k = i * 6;
+      const px = p[j], py = p[j+1], pz = p[j+2];
+      const r2 = px*px + py*py + pz*pz;
+
+      if (r2 < hz2 || r2 > 300 * 300) {        // consumed, or escaped
+        if (r2 < hz2) eatenThisFrame++;
+        this._spawn(i);
+        const nx = p[j], ny = p[j+1], nz = p[j+2];
+        pos[k] = nx; pos[k+1] = ny; pos[k+2] = nz;          // zero-length segment
+        pos[k+3] = nx; pos[k+4] = ny; pos[k+5] = nz;
+        for (let q = 0; q < 6; q++) col[k+q] = 0;
+        continue;
+      }
+
+      const r = Math.sqrt(r2);
+      const a = -G / Math.max(r2, 36);          // softened so it doesn't explode
+      v[j]   += a * (px / r) * step;
+      v[j+1] += a * (py / r) * step;
+      v[j+2] += a * (pz / r) * step;
+      const nx = px + v[j] * step, ny = py + v[j+1] * step, nz = pz + v[j+2] * step;
+      p[j] = nx; p[j+1] = ny; p[j+2] = nz;
+
+      // streak trails velocity, not one frame of it: distant particles read as
+      // dots, infalling ones stretch into long tails as they accelerate
+      const K = 0.25;
+      pos[k]   = nx - v[j] * K; pos[k+1] = ny - v[j+1] * K; pos[k+2] = nz - v[j+2] * K;
+      pos[k+3] = nx;            pos[k+4] = ny;              pos[k+5] = nz;
+
+      const sp = Math.min(1, Math.hypot(v[j], v[j+1], v[j+2]) / 70);
+      const near = Math.min(1, 40 / r);
+      const b = 0.04 + sp * 0.7 + near * 0.55;
+      this._c.lerpColors(this.cA, this.cB, Math.min(1, sp * 0.8 + near * 0.5));
+      col[k]   = this._c.r * b * 0.35; col[k+1] = this._c.g * b * 0.35; col[k+2] = this._c.b * b * 0.35;
+      col[k+3] = this._c.r * b;        col[k+4] = this._c.g * b;        col[k+5] = this._c.b * b;
+    }
+    this.geo.attributes.position.needsUpdate = true;
+    this.geo.attributes.color.needsUpdate = true;
+
+    // the horizon brightens with how fast it is actually feeding
+    this.glow += (Math.min(1, eatenThisFrame / 26) - this.glow) * Math.min(1, dt * 4);
+    this.ring.material.opacity = 0.3 + this.glow * 0.65 + this.surge * 0.2;
+    this.ring.material.color.lerpColors(this.cA, this.cB, Math.min(1, 0.4 + this.glow));
+    this.ring.scale.setScalar(1 + this.glow * 0.12 + L.bass * sens * 0.1);
+    this.ring.quaternion.copy(camera.quaternion);   // billboard (group is unrotated)
+  }
+}
+
 /* ---------- mode registry: class + preferred camera framing ---------- */
 const MODES = [
   { name:'Nebula',    cls:Nebula,    cam:{ pos:[0,26,64],  min:12, max:220, rot:0.5  } },
@@ -975,6 +1255,8 @@ const MODES = [
   { name:'Vortex',    cls:Vortex,    cam:{ pos:[0,38,88],  min:10, max:260, rot:0.3  } },
   { name:'Attractor', cls:Attractor, cam:{ pos:[0,0,128],  min:14, max:340, rot:0.25 } },
   { name:'Drift',     cls:Drift,     cam:{ pos:[0,34,104], min:14, max:320, rot:0    } },
+  { name:'Equalizer', cls:Equalizer, cam:{ pos:[0,11,68],  min:12, max:300, rot:0    } },
+  { name:'Singularity', cls:Singularity, cam:{ pos:[0,22,118], min:8, max:400, rot:0.15 } },
 ];
 
 /* ============================================================ app state */
@@ -1077,6 +1359,37 @@ $('#btnDemo').onclick   = () => pickSource('demo');
 document.querySelectorAll('[data-src]').forEach(b => b.onclick = () => pickSource(b.dataset.src));
 $('#sens').oninput = e => sens = +e.target.value;
 
+/* ---------- backdrop controls ---------- */
+$('#bgLoad').onclick = () => $('#bgFile').click();
+$('#bgFile').onchange = e => {
+  const f = e.target.files && e.target.files[0];
+  if (!f) return;
+  const fr = new FileReader();
+  fr.onload = () => {
+    const url = fr.result;
+    setBackdrop(url, () => toast('BAD IMAGE'));
+    // persist small images only; localStorage caps out around 5 MB
+    try {
+      if (url.length < 3.5e6) localStorage.setItem(BG_KEY, url);
+      else toast('TOO BIG TO SAVE');
+    } catch (err) { /* private mode / quota — backdrop still works this session */ }
+  };
+  fr.readAsDataURL(f);
+  e.target.value = '';
+};
+$('#bgClear').onclick = () => {
+  clearBackdrop();
+  try { localStorage.removeItem(BG_KEY); } catch (err) {}
+};
+$('#bgOp').oninput = e => {
+  bgOpacity = +e.target.value;
+  if (bgMesh) bgMesh.material.opacity = bgOpacity;
+};
+try {
+  const saved = localStorage.getItem(BG_KEY);
+  if (saved) setBackdrop(saved);
+} catch (err) {}
+
 function toggleAuto() {
   auto = !auto;
   autoModeT = 0; autoThemeT = 0;
@@ -1086,8 +1399,9 @@ function toggleAuto() {
 $('#autoBtn').onclick = toggleAuto;
 
 addEventListener('keydown', e => {
-  const n = +e.key;
-  if (n >= 1 && n <= 9 && n <= MODES.length) { setMode(n - 1); toast(MODES[n - 1].name.toUpperCase()); }
+  // 1-9 select the first nine modes, 0 selects the tenth
+  const n = e.key === '0' ? 10 : +e.key;
+  if (n >= 1 && n <= 10 && n <= MODES.length) { setMode(n - 1); toast(MODES[n - 1].name.toUpperCase()); }
   else if (e.key === 't' || e.key === 'T') { setTheme((themeIdx + 1) % THEMES.length); toast(THEMES[themeIdx].name.toUpperCase()); }
   else if (e.key === 'a' || e.key === 'A') toggleAuto();
   else if (e.key === 'h' || e.key === 'H') {

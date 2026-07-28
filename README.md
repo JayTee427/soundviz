@@ -1,4 +1,4 @@
-# NEON FLUX
+# NEON FLUX — Audio Visualizer
 
 A 3D, real-time sound visualizer that runs in your browser and reacts to **whatever your PC is already playing** — Spotify, YouTube, a game, your DAW, anything. No install, no build step, no virtual audio cables. It's one HTML file.
 
